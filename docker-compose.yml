@@ -1,0 +1,30 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        # The frontend is served by the same container, so a relative path works.
+        VITE_API_URL: /api
+    image: ftech-office:latest
+    container_name: ftech-office
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: file:/app/server/data/ftech.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-superadmin}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-Admin@123}
+      BACKUP_ADMIN_USERNAME: ${BACKUP_ADMIN_USERNAME:-ftech.backup}
+      BACKUP_ADMIN_PASSWORD: ${BACKUP_ADMIN_PASSWORD:-Backup@123}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+    volumes:
+      # Records must survive a redeploy — Section 15 is not optional.
+      - ftech-data:/app/server/data
+
+volumes:
+  ftech-data:

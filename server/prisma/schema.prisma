@@ -1,0 +1,381 @@
+// Ftech Computers — Office Management System
+// Provider is SQLite for zero-setup local/dev runs.
+// For Postgres: set provider = "postgresql" and point DATABASE_URL at your instance.
+// (Enums / Json are stored as String here so the schema stays SQLite compatible;
+//  the constants live in src/lib/constants.js.)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────── People & access
+
+model User {
+  id           String    @id @default(cuid())
+  employeeId   String    @unique // permanent, human readable: FT-0001
+  username     String    @unique
+  passwordHash String
+  name         String
+  role         String // SUPER_ADMIN | ADMIN | EMPLOYEE
+  email        String?
+  phone        String?
+  photoUrl     String?
+  joinDate     DateTime  @default(now())
+  isActive     Boolean   @default(true) // deactivate, never delete (14.1)
+  isHidden     Boolean   @default(false) // backup super admin (14.2)
+  isManager    Boolean   @default(false) // admins may never edit a manager's pay (7.2)
+  departmentId String?
+  permissions  String    @default("[]") // JSON array of permission keys (admins)
+
+  // pay setup (12.1)
+  salaryType   String    @default("MONTHLY") // MONTHLY | HOURLY
+  salaryAmount Float     @default(0)
+
+  mustChangePassword Boolean  @default(false)
+  lastLoginAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  department        Department?      @relation("DeptMembers", fields: [departmentId], references: [id])
+  jobRoles          UserJobRole[]
+  workSubmissions   WorkSubmission[] @relation("SubmissionOwner")
+  submittedForOther WorkSubmission[] @relation("SubmissionAuthor")
+  reviewedWork      WorkSubmission[] @relation("SubmissionReviewer")
+  attendance        Attendance[]     @relation("AttendanceOwner")
+  markedAttendance  Attendance[]     @relation("AttendanceMarker")
+  leaveRequests     LeaveRequest[]   @relation("LeaveOwner")
+  reviewedLeave     LeaveRequest[]   @relation("LeaveReviewer")
+  taskAssignments   Task[]           @relation("TaskAssignee")
+  createdTasks      Task[]           @relation("TaskCreator")
+  taskResponses     TaskResponse[]   @relation("TaskResponder")
+  reviewedResponses TaskResponse[]   @relation("TaskResponseReviewer")
+  notices           Notice[]         @relation("NoticeAuthor")
+  targetedNotices   Notice[]         @relation("NoticeTarget")
+  noticeReads       NoticeRead[]
+  queries           Query[]          @relation("QueryOwner")
+  queryReplies      QueryReply[]
+  payItems          PayItem[]        @relation("PayItemOwner")
+  createdPayItems   PayItem[]        @relation("PayItemAuthor")
+  auditLogs         AuditLog[]
+
+  @@index([role])
+  @@index([departmentId])
+  @@index([isActive])
+}
+
+// ──────────────────────────────────────────────── Departments & job roles (3,4)
+
+model Department {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  nameHi    String? // Hindi label (16.3)
+  icon      String   @default("Building2")
+  color     String   @default("indigo")
+  status    String   @default("ACTIVE") // ACTIVE | COMING_SOON
+  autopilot Boolean  @default(false) // 10.3
+  target    Int      @default(0) // 6.4 shipment / period target
+  targetPeriod String @default("MONTH") // WEEK | MONTH
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  User[]   @relation("DeptMembers")
+  jobRoles JobRole[]
+  tasks    Task[]
+  notices  Notice[]
+}
+
+model JobRole {
+  id           String   @id @default(cuid())
+  departmentId String
+  name         String
+  nameHi       String?
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  department Department    @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  questions  Question[]
+  users      UserJobRole[]
+
+  @@unique([departmentId, name])
+}
+
+model Question {
+  id        String   @id @default(cuid())
+  jobRoleId String
+  key       String // stable machine key, e.g. assemble_laptop
+  label     String
+  labelHi   String?
+  type      String   @default("NUMBER") // NUMBER | CHECK_FAIL (9.2)
+  unit      String? // laptop | tiny — never merged (9.1)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  jobRole JobRole     @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+  entries WorkEntry[]
+
+  @@unique([jobRoleId, key])
+}
+
+model UserJobRole {
+  id        String @id @default(cuid())
+  userId    String
+  jobRoleId String
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobRole JobRole @relation(fields: [jobRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobRoleId])
+}
+
+// ─────────────────────────────────────────────── Work submissions (9, 10, 11)
+
+model WorkSubmission {
+  id              String    @id @default(cuid())
+  userId          String
+  date            String // YYYY-MM-DD, local business day
+  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  isBackfilled    Boolean   @default(false) // 11.3
+  submittedById   String? // who actually typed it
+  submittedAt     DateTime  @default(now())
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  note            String?
+
+  user        User        @relation("SubmissionOwner", fields: [userId], references: [id], onDelete: Cascade)
+  submittedBy User?       @relation("SubmissionAuthor", fields: [submittedById], references: [id])
+  reviewedBy  User?       @relation("SubmissionReviewer", fields: [reviewedById], references: [id])
+  entries     WorkEntry[]
+
+  @@unique([userId, date]) // one submission per employee per day (9.4)
+  @@index([date])
+  @@index([status])
+}
+
+model WorkEntry {
+  id           String @id @default(cuid())
+  submissionId String
+  questionId   String
+  value        Int    @default(0) // checked count / completed count
+  failedValue  Int    @default(0) // only for CHECK_FAIL questions (9.2)
+
+  submission WorkSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, questionId])
+}
+
+// ───────────────────────────────────────────────── Attendance & holidays (11)
+
+model Attendance {
+  id         String    @id @default(cuid())
+  userId     String
+  date       String // YYYY-MM-DD
+  status     String // PRESENT | ABSENT | LEAVE | HALF_DAY | WFH | HOLIDAY
+  checkIn    DateTime?
+  checkOut   DateTime?
+  hours      Float     @default(0)
+  note       String?
+  markedById String? // null = self check-in
+  source     String    @default("SELF") // SELF | ADMIN | SYSTEM
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user     User  @relation("AttendanceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  markedBy User? @relation("AttendanceMarker", fields: [markedById], references: [id])
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+model Holiday {
+  id     String @id @default(cuid())
+  date   String @unique // YYYY-MM-DD
+  name   String
+  nameHi String?
+  note   String?
+}
+
+// ───────────────────────────────────────────────────── Leave requests (13.4)
+
+model LeaveRequest {
+  id           String    @id @default(cuid())
+  userId       String
+  type         String // SICK | URGENT | CASUAL | EMERGENCY | PAID | UNPAID | HALF_DAY | WFH | OTHER
+  fromDate     String
+  toDate       String
+  reason       String
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+
+  user       User  @relation("LeaveOwner", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("LeaveReviewer", fields: [reviewedById], references: [id])
+
+  @@index([status])
+  @@index([userId])
+}
+
+// ───────────────────────────────────────────────────────── Tasks (13.3)
+
+model Task {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  departmentId String?
+  assigneeId   String? // null + departmentId = whole department
+  dueDate      DateTime?
+  priority     String   @default("NORMAL") // LOW | NORMAL | HIGH
+  createdById  String
+  isOpen       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  department Department?    @relation(fields: [departmentId], references: [id])
+  assignee   User?          @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy  User           @relation("TaskCreator", fields: [createdById], references: [id])
+  responses  TaskResponse[]
+
+  @@index([assigneeId])
+  @@index([departmentId])
+}
+
+model TaskResponse {
+  id           String    @id @default(cuid())
+  taskId       String
+  userId       String
+  response     String // COMPLETE | NOT_COMPLETE | NOTE
+  note         String?
+  onTime       Boolean   @default(true)
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+
+  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User  @relation("TaskResponder", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("TaskResponseReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([taskId, userId])
+}
+
+// ──────────────────────────────────────────────── Notices + read tracking (13.2)
+
+model Notice {
+  id           String   @id @default(cuid())
+  title        String
+  body         String
+  audience     String   @default("ALL") // ALL | DEPARTMENT | USER
+  departmentId String?
+  targetUserId String?
+  pinned       Boolean  @default(false)
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  department Department?  @relation(fields: [departmentId], references: [id])
+  targetUser User?        @relation("NoticeTarget", fields: [targetUserId], references: [id])
+  createdBy  User         @relation("NoticeAuthor", fields: [createdById], references: [id])
+  reads      NoticeRead[]
+}
+
+model NoticeRead {
+  id       String   @id @default(cuid())
+  noticeId String
+  userId   String
+  readAt   DateTime @default(now())
+
+  notice Notice @relation(fields: [noticeId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noticeId, userId])
+}
+
+// ──────────────────────────────────────────────── Employee questions (13.5)
+
+model Query {
+  id        String   @id @default(cuid())
+  userId    String
+  subject   String
+  message   String
+  status    String   @default("OPEN") // OPEN | ANSWERED | CLOSED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User         @relation("QueryOwner", fields: [userId], references: [id], onDelete: Cascade)
+  replies QueryReply[]
+}
+
+model QueryReply {
+  id        String   @id @default(cuid())
+  queryId   String
+  userId    String
+  message   String
+  createdAt DateTime @default(now())
+
+  query Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────── Pay items & month locks (12)
+
+model PayItem {
+  id          String   @id @default(cuid())
+  userId      String
+  month       String // YYYY-MM
+  type        String // INCENTIVE | BONUS | DEDUCTION
+  amount      Float
+  note        String?
+  batchId     String? // set when applied to everyone at once
+  createdById String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("PayItemOwner", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("PayItemAuthor", fields: [createdById], references: [id])
+
+  @@index([userId, month])
+}
+
+model MonthLock {
+  id           String    @id @default(cuid())
+  month        String    @unique // YYYY-MM
+  lockedById   String
+  lockedAt     DateTime  @default(now())
+  unlockedById String?
+  unlockedAt   DateTime?
+  unlockReason String?
+  isLocked     Boolean   @default(true)
+}
+
+// ─────────────────────────────────────────────────── The history rule (15)
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String
+  action    String // e.g. WORK_APPROVED, SALARY_UPDATED
+  entity    String // User | WorkSubmission | ...
+  entityId  String?
+  summary   String
+  meta      String   @default("{}") // JSON
+  createdAt DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model Setting {
+  key   String @id
+  value String
+}

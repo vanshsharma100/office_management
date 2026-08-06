@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Prisma client and create the schema
+        run: npm run db:push -w server
+        env:
+          DATABASE_URL: file:../data/ci.db
+
+      - name: Seed
+        run: npm run db:seed -w server
+        env:
+          DATABASE_URL: file:../data/ci.db
+          SEED_DEMO_DATA: 'true'
+
+      - name: Smoke test the API
+        run: |
+          node server/src/index.js &
+          for i in $(seq 1 20); do
+            curl -fsS http://localhost:4000/api/health && break || sleep 1
+          done
+          curl -fsS http://localhost:4000/api/health
+          TOKEN=$(curl -fsS -X POST http://localhost:4000/api/auth/login \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"superadmin","password":"Admin@123"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).token')
+          curl -fsS http://localhost:4000/api/dashboard -H "Authorization: Bearer $TOKEN" > /dev/null
+          echo "API smoke test passed"
+        env:
+          DATABASE_URL: file:../data/ci.db
+          JWT_SECRET: ci-secret
+
+      - name: Build the frontend
+        run: npm run build -w web
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the Docker image
+        run: docker build -t ftech-office:ci .
