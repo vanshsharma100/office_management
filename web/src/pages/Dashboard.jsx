@@ -531,13 +531,12 @@ function EmployeeDashboard({ data, user, reload }) {
 
 function Hero({ title, subtitle, right }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-brand-600 via-brand-700 to-violet-700 p-6 text-white shadow-lift sm:p-7">
-      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-violet-400/20 blur-3xl" />
+    <div className="slab relative overflow-hidden p-6 shadow-lift sm:p-7">
+      <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-white/[.06] blur-3xl dark:bg-black/[.06]" />
       <div className="relative flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
-          <p className="mt-1 text-sm text-white/70">{subtitle}</p>
+          <h1 className="font-display text-2xl font-bold tracking-tightest sm:text-3xl">{title}</h1>
+          <p className="slab-muted mt-1 text-sm">{subtitle}</p>
         </div>
         {right}
       </div>

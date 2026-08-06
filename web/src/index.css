@@ -2,9 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Palette: white page / black text / silver for secondary in light mode,
+ * black page / white text / silver in dark mode.
+ *
+ * Colours are written as ordinary Tailwind `dark:` variants with literal
+ * values. An earlier version drove them from CSS custom properties; Chrome
+ * would not repaint elements that transition background-color when the
+ * property behind that colour changed, so cards and nav rows kept the previous
+ * theme until a reload. Literal values avoid that entirely.
+ *
+ * `--accent` / `--accent-contrast` remain for the few places that genuinely
+ * need "whatever the current foreground is" (the primary button and the slab),
+ * and neither of those transitions its background.
+ */
 @layer base {
   :root {
-    color-scheme: light dark;
+    color-scheme: light;
+    --accent: 0 0 0;
+    --accent-contrast: 255 255 255;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --accent: 255 255 255;
+    --accent-contrast: 0 0 0;
   }
 
   html,
@@ -13,13 +35,26 @@
     height: 100%;
   }
 
-  body {
-    @apply bg-ink-50 text-ink-900 antialiased;
-    font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+  /* Applied for one frame while the theme swaps, so the change is instant
+     rather than a 200ms colour crossfade on every surface at once. */
+  .theme-switching,
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
   }
 
+  body {
+    @apply bg-white text-black antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+  }
   .dark body {
-    @apply bg-ink-950 text-ink-100;
+    @apply bg-black text-white;
+  }
+
+  ::selection {
+    background-color: rgb(var(--accent));
+    color: rgb(var(--accent-contrast));
   }
 
   /* Numeric inputs on the work form open a number pad, never a full keyboard. */
@@ -31,16 +66,20 @@
   input[type='number'] {
     -moz-appearance: textfield;
   }
+  /* Native date/time pickers render dark glyphs; invert them on black. */
+  .dark input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
 
   ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-ink-300/60;
+    @apply rounded-full bg-ink-300;
   }
   .dark ::-webkit-scrollbar-thumb {
-    @apply bg-white/10;
+    @apply bg-ink-700;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -49,77 +88,114 @@
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-ink-200/70 bg-white shadow-card
-           dark:border-white/10 dark:bg-white/[.04] dark:shadow-glow;
+    @apply rounded-2xl border border-ink-200 bg-white text-black shadow-card
+           dark:border-ink-700 dark:bg-black dark:text-white dark:shadow-glow;
   }
 
   .card-hover {
-    @apply transition duration-200 hover:-translate-y-0.5 hover:border-brand-300/70 hover:shadow-lift
-           dark:hover:border-brand-400/40;
+    @apply transition duration-200 hover:-translate-y-0.5 hover:border-black hover:shadow-lift
+           dark:hover:border-white;
+  }
+
+  /* The one high-contrast surface: a black slab on a white page and a white
+     slab on a black page. Used for hero panels and toasts. */
+  .slab {
+    @apply rounded-3xl border border-black bg-black text-white
+           dark:border-ink-700 dark:bg-white dark:text-black;
+  }
+  .slab-muted {
+    @apply text-white/60 dark:text-black/60;
   }
 
   .btn {
     @apply inline-flex select-none items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm
-           font-semibold transition active:scale-[.98] disabled:pointer-events-none disabled:opacity-50;
+           font-semibold tracking-tight transition-[transform,opacity,border-color,box-shadow]
+           duration-150 active:scale-[.97] disabled:pointer-events-none disabled:opacity-40;
   }
+
   .btn-primary {
-    @apply btn bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-lift
-           hover:from-brand-400 hover:to-brand-500;
+    @apply btn bg-black text-white shadow-lift hover:opacity-85 dark:bg-white dark:text-black;
   }
   .btn-ghost {
-    @apply btn border border-ink-200 bg-white text-ink-700 hover:bg-ink-50
-           dark:border-white/10 dark:bg-white/5 dark:text-ink-100 dark:hover:bg-white/10;
+    @apply btn border border-ink-200 bg-white text-black hover:border-black
+           dark:border-ink-700 dark:bg-black dark:text-white dark:hover:border-white;
   }
   .btn-danger {
-    @apply btn bg-rose-600 text-white hover:bg-rose-500;
+    @apply btn bg-rose-600 text-white hover:opacity-90;
   }
   .btn-success {
-    @apply btn bg-emerald-600 text-white hover:bg-emerald-500;
+    @apply btn bg-emerald-600 text-white hover:opacity-90;
   }
   .btn-sm {
     @apply px-3 py-1.5 text-xs;
   }
 
+  /* Buttons sitting on a slab invert again so they stay readable against it. */
+  .slab .btn-primary {
+    @apply bg-white text-black dark:bg-black dark:text-white;
+  }
+  .slab .btn-ghost {
+    @apply border-white/30 bg-white/10 text-white hover:border-white
+           dark:border-black/30 dark:bg-black/10 dark:text-black dark:hover:border-black;
+  }
+
   .input {
-    @apply w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-ink-900
-           outline-none transition placeholder:text-ink-400
-           focus:border-brand-400 focus:ring-4 focus:ring-brand-500/20
-           dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder:text-ink-400;
+    @apply w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm text-black
+           outline-none transition-[border-color,box-shadow] placeholder:text-ink-400
+           focus:border-black focus:ring-4 focus:ring-black/10
+           dark:border-ink-700 dark:bg-black dark:text-white
+           dark:focus:border-white dark:focus:ring-white/15;
   }
   .label {
-    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500 dark:text-ink-400;
+    @apply mb-1.5 block text-[11px] font-bold uppercase tracking-[.08em] text-ink-500 dark:text-ink-400;
   }
 
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold;
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-tight;
   }
 
   .skeleton {
-    @apply relative overflow-hidden rounded-xl bg-ink-200/60 dark:bg-white/5;
+    @apply relative overflow-hidden rounded-xl bg-ink-100 dark:bg-ink-800;
   }
   .skeleton::after {
     content: '';
     @apply absolute inset-0 -translate-x-full animate-shimmer
-           bg-gradient-to-r from-transparent via-white/40 to-transparent dark:via-white/10;
+           bg-gradient-to-r from-transparent via-black/5 to-transparent dark:via-white/10;
   }
 
+  /* Interactive nav: the label slides a touch and an indicator bar grows in. */
   .nav-link {
-    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-600
-           transition hover:bg-ink-100 hover:text-ink-900
-           dark:text-ink-300 dark:hover:bg-white/5 dark:hover:text-white;
+    @apply relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-500
+           transition-[transform,color] duration-200 hover:translate-x-0.5 hover:bg-ink-100
+           hover:text-black dark:text-ink-400 dark:hover:bg-ink-800 dark:hover:text-white;
+  }
+  .nav-link::before {
+    content: '';
+    @apply absolute left-0 top-1/2 h-0 w-[3px] -translate-y-1/2 rounded-full bg-black
+           transition-[height] duration-200 dark:bg-white;
   }
   .nav-link-active {
-    @apply bg-brand-500/10 text-brand-700 shadow-[inset_0_0_0_1px_rgba(53,99,255,.18)]
-           dark:bg-brand-500/15 dark:text-brand-200;
+    @apply bg-ink-100 font-semibold text-black dark:bg-ink-800 dark:text-white;
+  }
+  .nav-link-active::before {
+    @apply h-5;
   }
 
   .table-wrap {
-    @apply overflow-x-auto rounded-2xl border border-ink-200/70 bg-white dark:border-white/10 dark:bg-white/[.03];
+    @apply overflow-x-auto rounded-2xl border border-ink-200 bg-white dark:border-ink-700 dark:bg-black;
   }
   .th {
-    @apply whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-ink-500 dark:text-ink-400;
+    @apply whitespace-nowrap px-4 py-3 text-left text-[11px] font-bold uppercase tracking-[.08em]
+           text-ink-500 dark:text-ink-400;
   }
   .td {
-    @apply whitespace-nowrap px-4 py-3 text-sm text-ink-700 dark:text-ink-200;
+    @apply whitespace-nowrap px-4 py-3 text-sm text-black dark:text-white;
+  }
+}
+
+@layer utilities {
+  /* Subtle raised surface for list rows — silver on white, graphite on black. */
+  .surface {
+    @apply bg-ink-100 dark:bg-ink-800;
   }
 }
