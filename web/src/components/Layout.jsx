@@ -77,9 +77,9 @@ export default function Layout() {
   const rest = nav.slice(4);
 
   return (
-    <div className="min-h-full bg-ink-50 bg-mesh bg-fixed dark:bg-ink-950">
+    <div className="min-h-full bg-white dark:bg-black">
       {/* ── Sidebar (desktop) ─────────────────────────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-ink-200/70 bg-white/80 backdrop-blur-xl lg:flex dark:border-white/10 dark:bg-ink-950/70">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-ink-200 bg-white/90 backdrop-blur-xl lg:flex dark:border-white/12 dark:bg-black/90">
         <Brand />
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
           {nav.map((item) => (
@@ -92,8 +92,8 @@ export default function Layout() {
       {/* ── Mobile drawer ─────────────────────────────────────────────── */}
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-ink-950/60 backdrop-blur-sm" onClick={() => setDrawer(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-72 animate-fade-up flex-col border-r border-ink-200/70 bg-white dark:border-white/10 dark:bg-ink-950">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDrawer(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-72 animate-fade-up flex-col border-r border-ink-200 bg-white dark:border-white/12 dark:bg-black">
             <Brand onClose={() => setDrawer(false)} />
             <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-4">
               {nav.map((item) => (
@@ -107,18 +107,18 @@ export default function Layout() {
 
       {/* ── Main ──────────────────────────────────────────────────────── */}
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-ink-200/70 bg-white/80 backdrop-blur-xl dark:border-white/10 dark:bg-ink-950/70">
+        <header className="sticky top-0 z-30 border-b border-ink-200 bg-white/90 backdrop-blur-xl dark:border-white/12 dark:bg-black/90">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
             <button
               onClick={() => setDrawer(true)}
-              className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-600 lg:hidden dark:border-white/10 dark:text-ink-200"
+              className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-black lg:hidden dark:border-white/15 dark:text-white"
               aria-label="Open menu"
             >
               <Menu size={19} />
             </button>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate font-display text-base font-semibold tracking-tight sm:text-lg">
+              <p className="truncate font-display text-base font-semibold tracking-tightest sm:text-lg">
                 {nav.find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to)))
                   ? t(
                       nav.find((n) => (n.end ? location.pathname === n.to : location.pathname.startsWith(n.to))).label,
@@ -138,8 +138,8 @@ export default function Layout() {
               className={clsx(
                 'hidden h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition sm:flex',
                 hindi
-                  ? 'border-brand-400/40 bg-brand-500/12 text-brand-600 dark:text-brand-300'
-                  : 'border-ink-200 text-ink-500 dark:border-white/10 dark:text-ink-400'
+                  ? 'border-black bg-black text-white dark:border-white dark:bg-white dark:text-black'
+                  : 'border-ink-200 text-ink-500 hover:border-black hover:text-black dark:border-white/15 dark:text-ink-400 dark:hover:border-white dark:hover:text-white'
               )}
             >
               <Languages size={16} />
@@ -148,7 +148,7 @@ export default function Layout() {
 
             <button
               onClick={toggleTheme}
-              className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-600 transition hover:bg-ink-100 dark:border-white/10 dark:text-ink-200 dark:hover:bg-white/5"
+              className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-black transition hover:border-black hover:bg-ink-100 dark:border-white/15 dark:text-white dark:hover:border-white dark:hover:bg-white/10"
               aria-label="Toggle theme"
             >
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
@@ -157,7 +157,7 @@ export default function Layout() {
             <div className="relative hidden sm:block">
               <button
                 onClick={() => setMenu((m) => !m)}
-                className="flex items-center gap-2 rounded-xl border border-ink-200 py-1.5 pl-1.5 pr-2.5 transition hover:bg-ink-100 dark:border-white/10 dark:hover:bg-white/5"
+                className="flex items-center gap-2 rounded-xl border border-ink-200 py-1.5 pl-1.5 pr-2.5 transition hover:border-black hover:bg-ink-100 dark:border-white/15 dark:hover:border-white dark:hover:bg-white/10"
               >
                 <Avatar name={user?.name} size={30} />
                 <ChevronDown size={15} className="text-ink-400" />
@@ -165,14 +165,14 @@ export default function Layout() {
               {menu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-56 animate-fade-up overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-xl dark:border-white/10 dark:bg-ink-900">
-                    <div className="border-b border-ink-200/70 px-4 py-3 dark:border-white/10">
+                  <div className="absolute right-0 z-20 mt-2 w-56 animate-fade-up overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-xl dark:border-white/15 dark:bg-black">
+                    <div className="border-b border-ink-200 px-4 py-3 dark:border-white/12">
                       <p className="truncate text-sm font-semibold">{user?.name}</p>
                       <p className="text-xs text-ink-500 dark:text-ink-400">{roleLabel}</p>
                     </div>
                     <button
                       onClick={() => navigate('/settings')}
-                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm hover:bg-ink-50 dark:hover:bg-white/5"
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-sm hover:bg-ink-100 dark:hover:bg-white/10"
                     >
                       <Settings size={15} /> Settings
                     </button>
@@ -195,7 +195,7 @@ export default function Layout() {
       </div>
 
       {/* ── Mobile bottom bar ─────────────────────────────────────────── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200/70 bg-white/95 backdrop-blur-xl lg:hidden dark:border-white/10 dark:bg-ink-950/95">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-white/95 backdrop-blur-xl lg:hidden dark:border-white/12 dark:bg-black/95">
         <div className="flex items-stretch justify-around px-1 pb-[env(safe-area-inset-bottom)]">
           {primary.map((item) => (
             <NavLink
@@ -204,8 +204,8 @@ export default function Layout() {
               end={item.end}
               className={({ isActive }) =>
                 clsx(
-                  'flex flex-1 flex-col items-center gap-1 px-1 py-2.5 text-[10px] font-semibold transition',
-                  isActive ? 'text-brand-600 dark:text-brand-300' : 'text-ink-500 dark:text-ink-400'
+                  'flex flex-1 flex-col items-center gap-1 px-1 py-2.5 text-[10px] font-semibold transition-all duration-200',
+                  isActive ? 'scale-105 text-black dark:text-white' : 'text-ink-500 dark:text-ink-400'
                 )
               }
             >
@@ -243,11 +243,11 @@ function NavItem({ item, label }) {
 function Brand({ onClose }) {
   return (
     <div className="flex items-center gap-3 px-5 py-5">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-violet-600 font-display text-lg font-bold text-white shadow-lift">
+      <span className="grid h-10 w-10 place-items-center rounded-xl bg-black font-display text-lg font-bold text-white shadow-lift dark:bg-white dark:text-black">
         F
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-[15px] font-bold leading-tight">Ftech Computers</p>
+        <p className="truncate font-display text-[15px] font-bold leading-tight tracking-tightest">Ftech Computers</p>
         <p className="truncate text-[11px] font-medium text-ink-500 dark:text-ink-400">Office Management</p>
       </div>
       {onClose && (
@@ -261,8 +261,8 @@ function Brand({ onClose }) {
 
 function UserCard({ user, roleLabel, onLogout }) {
   return (
-    <div className="border-t border-ink-200/70 p-3 dark:border-white/10">
-      <div className="flex items-center gap-3 rounded-xl bg-ink-100/70 p-3 dark:bg-white/5">
+    <div className="border-t border-ink-200 p-3 dark:border-white/12">
+      <div className="flex items-center gap-3 rounded-xl bg-ink-100 p-3 dark:bg-white/8">
         <Avatar name={user?.name} size={38} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{user?.name}</p>

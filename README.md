@@ -43,20 +43,48 @@ Records live in the `ftech-data` volume so they survive a redeploy.
 
 ## Sign in
 
+The system starts with two accounts and no data — no attendance, work,
+tasks, notices or salary figures. The first real numbers are your own.
+
 | Panel | Username | Password | What they see |
 |---|---|---|---|
 | Super Admin | `superadmin` | `Admin@123` | Everything, no restrictions |
-| Admin | `manoj` | `Admin@123` | Only the sections switched on for them |
 | Employee | `rahul` | `Pass@123` | Technical → Assembly (2 questions) |
-| Employee | `sandeep` | `Pass@123` | Technical → Returns / QC (checked + failed) |
-| Employee | `vikas` | `Pass@123` | Packing & Cleaning (4 questions) |
-| Employee | `mohit` | `Pass@123` | Listing — **Coming Soon** module |
 
 A hidden backup Super Admin also exists (`ftech.backup` / `Backup@123`). It can
 sign in but never appears in any list, report, dashboard count or export — see
 Section 14.2 of the spec.
 
-**Change every one of these before deploying.**
+The five departments, their job roles and question sets **are** created, since
+they are configuration rather than data. Add your staff from **Employees → New
+account**.
+
+Want the sample company back to explore the features? Set `SEED_DEMO_DATA=true`
+in `.env` and reseed — that adds an Admin with partial permissions, seven more
+employees, three weeks of work history, tasks and notices.
+
+**Change every password before deploying.**
+
+---
+
+## The interface
+
+White page, black text, silver for anything secondary. Dark mode flips to a
+black page with white text; silver stays silver. The toggle sits in the header
+and is remembered per device.
+
+Only three colours survive that rule, and only where meaning depends on them:
+green for approved, amber for pending or coming soon, red for rejected. A
+monochrome approval queue is genuinely harder to read.
+
+Type is **Space Grotesk** for headings and **Inter** for everything else.
+
+> **Note for anyone editing the theme:** colours are written as ordinary
+> Tailwind `dark:` variants with literal values, and `UIContext` forces a style
+> recalculation when the theme changes. Both matter — driving surface colours
+> from CSS custom properties left Chrome painting stale colours on any element
+> with a `transition` on `background-color` until the page was reloaded. The
+> reasoning is recorded in `web/src/index.css` and `web/src/context/UIContext.jsx`.
 
 ---
 

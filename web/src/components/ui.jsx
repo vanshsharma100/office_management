@@ -15,7 +15,7 @@ export function SectionTitle({ title, subtitle, action, icon: Icon }) {
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div className="flex items-center gap-3">
         {Icon && (
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-500/12 text-brand-600 dark:text-brand-300">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-black text-white dark:bg-white dark:text-black">
             <Icon size={19} />
           </span>
         )}
@@ -30,13 +30,14 @@ export function SectionTitle({ title, subtitle, action, icon: Icon }) {
 }
 
 const TONES = {
-  neutral: 'bg-ink-100 text-ink-600 dark:bg-white/10 dark:text-ink-200',
-  brand: 'bg-brand-500/12 text-brand-700 dark:text-brand-300',
-  green: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
-  amber: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  red: 'bg-rose-500/12 text-rose-700 dark:text-rose-300',
-  violet: 'bg-violet-500/12 text-violet-700 dark:text-violet-300',
-  sky: 'bg-sky-500/12 text-sky-700 dark:text-sky-300',
+  neutral: 'bg-ink-100 text-ink-600 dark:bg-white/10 dark:text-ink-300',
+  brand: 'bg-black/[.07] text-black dark:bg-white/15 dark:text-white',
+  violet: 'bg-black/[.07] text-black dark:bg-white/15 dark:text-white',
+  sky: 'bg-black/[.07] text-black dark:bg-white/15 dark:text-white',
+  // Approval states keep their colour — a monochrome queue reads far worse.
+  green: 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+  amber: 'bg-amber-500/20 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300',
+  red: 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300',
 };
 
 export function Badge({ tone = 'neutral', children, className }) {
@@ -130,7 +131,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
 export function Empty({ title = 'Nothing here yet', hint, icon: Icon = Inbox, action }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
-      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink-100 text-ink-400 dark:bg-white/5">
+      <span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink-100 text-ink-400 dark:bg-white/10">
         <Icon size={24} />
       </span>
       <div>
@@ -180,7 +181,7 @@ export function Stepper({ value, onChange, disabled, step = 1, min = 0, max = 99
         onPointerDown={() => holdStart(-step)}
         onPointerUp={holdEnd}
         onPointerLeave={holdEnd}
-        className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-ink-200 bg-white text-ink-600 transition active:scale-95 disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-ink-200"
+        className="grid h-12 w-12 shrink-0 place-items-center rounded-xl border border-ink-200 bg-white text-black transition hover:border-black active:scale-95 disabled:opacity-30 dark:border-white/15 dark:bg-black dark:text-white dark:hover:border-white"
       >
         <Minus size={18} />
       </button>
@@ -203,7 +204,7 @@ export function Stepper({ value, onChange, disabled, step = 1, min = 0, max = 99
         onPointerDown={() => holdStart(step)}
         onPointerUp={holdEnd}
         onPointerLeave={holdEnd}
-        className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-gradient-to-b from-brand-500 to-brand-600 text-white shadow-lift transition active:scale-95 disabled:opacity-40"
+        className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-black text-white shadow-lift transition hover:opacity-85 active:scale-95 disabled:opacity-30 dark:bg-white dark:text-black"
       >
         <Plus size={18} />
       </button>
@@ -224,15 +225,15 @@ export function Field({ label, hint, error, children, className }) {
 
 export function Progress({ value = 0, tone = 'brand' }) {
   const bar = {
-    brand: 'from-brand-500 to-violet-500',
-    green: 'from-emerald-500 to-teal-400',
-    amber: 'from-amber-500 to-orange-400',
-    red: 'from-rose-500 to-red-400',
+    brand: 'bg-black dark:bg-white',
+    green: 'bg-emerald-500',
+    amber: 'bg-amber-500',
+    red: 'bg-rose-500',
   }[tone];
   return (
-    <div className="h-2 w-full overflow-hidden rounded-full bg-ink-200/70 dark:bg-white/10">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-ink-200 dark:bg-white/15">
       <div
-        className={clsx('h-full rounded-full bg-gradient-to-r transition-all duration-500', bar)}
+        className={clsx('h-full rounded-full transition-all duration-500', bar)}
         style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
       />
     </div>
@@ -248,25 +249,18 @@ export function Avatar({ name = '', size = 40, className }) {
     .join('')
     .toUpperCase();
 
-  // Stable colour per person so faces are recognisable in long lists.
-  const palette = [
-    'from-brand-500 to-violet-500',
-    'from-emerald-500 to-teal-500',
-    'from-amber-500 to-orange-500',
-    'from-rose-500 to-pink-500',
-    'from-sky-500 to-cyan-500',
-    'from-fuchsia-500 to-purple-500',
-  ];
-  const hue = palette[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length];
+  // Stable shade per person, so faces stay recognisable in long lists without
+  // breaking the black / silver / white palette.
+  const shades = ['#000000', '#2e2e34', '#4a4a52', '#75757f', '#9c9ca6'];
+  const shade = shades[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % shades.length];
 
   return (
     <span
       className={clsx(
-        'grid shrink-0 place-items-center rounded-full bg-gradient-to-br font-bold text-white',
-        hue,
+        'grid shrink-0 place-items-center rounded-full font-bold text-white ring-1 ring-black/5 dark:ring-white/15',
         className
       )}
-      style={{ width: size, height: size, fontSize: size * 0.36 }}
+      style={{ width: size, height: size, fontSize: size * 0.36, background: shade }}
     >
       {text || '?'}
     </span>
@@ -275,21 +269,28 @@ export function Avatar({ name = '', size = 40, className }) {
 
 export function Tabs({ tabs, active, onChange, className }) {
   return (
-    <div className={clsx('flex gap-1 overflow-x-auto rounded-xl bg-ink-100 p-1 dark:bg-white/5', className)}>
+    <div className={clsx('flex gap-1 overflow-x-auto rounded-xl bg-ink-100 p-1 dark:bg-white/10', className)}>
       {tabs.map((t) => (
         <button
           key={t.value}
           onClick={() => onChange(t.value)}
           className={clsx(
-            'flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition',
+            'flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200',
             active === t.value
-              ? 'bg-white text-ink-900 shadow-sm dark:bg-white/12 dark:text-white'
-              : 'text-ink-500 hover:text-ink-800 dark:text-ink-400 dark:hover:text-white'
+              ? 'bg-black text-white shadow-sm dark:bg-white dark:text-black'
+              : 'text-ink-500 hover:text-black dark:text-ink-400 dark:hover:text-white'
           )}
         >
           {t.label}
           {t.count > 0 && (
-            <span className="ml-1.5 rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[10px] font-bold text-brand-600 dark:text-brand-300">
+            <span
+              className={clsx(
+                'ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                active === t.value
+                  ? 'bg-white/20 text-white dark:bg-black/20 dark:text-black'
+                  : 'bg-black/10 text-black dark:bg-white/15 dark:text-white'
+              )}
+            >
               {t.count}
             </span>
           )}

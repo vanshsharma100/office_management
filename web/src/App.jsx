@@ -30,12 +30,12 @@ function Protected({ children }) {
 
 function FullScreenLoader() {
   return (
-    <div className="grid min-h-screen place-items-center bg-ink-950 bg-mesh">
+    <div className="grid min-h-screen place-items-center bg-white dark:bg-black">
       <div className="flex flex-col items-center gap-4">
-        <span className="grid h-14 w-14 animate-pulse place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-violet-600 font-display text-2xl font-bold text-white">
+        <span className="grid h-14 w-14 animate-pulse place-items-center rounded-2xl bg-black font-display text-2xl font-bold text-white dark:bg-white dark:text-black">
           F
         </span>
-        <Spinner label="Loading your workspace" className="text-ink-400" />
+        <Spinner label="Loading your workspace" className="text-ink-500 dark:text-ink-400" />
       </div>
     </div>
   );

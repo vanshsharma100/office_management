@@ -3,15 +3,48 @@ import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 const UIContext = createContext(null);
 
+/** Must stay in step with the `:root` / `.dark` blocks in index.css. */
+const THEME_TOKENS = {
+  light: { '--accent': '0 0 0', '--accent-contrast': '255 255 255' },
+  dark: { '--accent': '255 255 255', '--accent-contrast': '0 0 0' },
+};
+
 export function UIProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem('ftech_theme') || 'dark');
+  // White is the default look; dark mode is opt-in from the header toggle.
+  const [theme, setTheme] = useState(() => localStorage.getItem('ftech_theme') || 'light');
   // Section 16.3 — Hindi labels alongside English, toggled per device.
   const [hindi, setHindi] = useState(() => localStorage.getItem('ftech_hindi') === 'true');
   const [toasts, setToasts] = useState([]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const root = document.documentElement;
+
+    // Suppress transitions for the swap. An element that transitions
+    // background-color does not repaint when the custom property behind that
+    // colour changes, so cards and nav rows would otherwise keep the previous
+    // theme until a reload. See the note in index.css.
+    root.classList.add('theme-switching');
+    root.classList.toggle('dark', theme === 'dark');
+
+    // Writing the tokens inline on the root guarantees every descendant
+    // re-resolves them. The `:root` / `.dark` blocks in index.css supply the
+    // same values for first paint.
+    for (const [key, value] of Object.entries(THEME_TOKENS[theme] ?? THEME_TOKENS.light)) {
+      root.style.setProperty(key, value);
+    }
+
     localStorage.setItem('ftech_theme', theme);
+
+    // Chrome keeps stale computed colours on some elements after the `dark`
+    // class flips — cards and nav rows repainted only after a reload. Detaching
+    // the root for a single frame forces a full style recalculation, so every
+    // surface picks up the new theme at once.
+    root.style.display = 'none';
+    void root.offsetHeight;
+    root.style.display = '';
+
+    const restore = window.setTimeout(() => root.classList.remove('theme-switching'), 80);
+    return () => window.clearTimeout(restore);
   }, [theme]);
 
   useEffect(() => localStorage.setItem('ftech_hindi', String(hindi)), [hindi]);
@@ -49,20 +82,21 @@ export function UIProvider({ children }) {
 
 function Toast({ message, tone, onClose }) {
   const Icon = tone === 'error' ? AlertTriangle : tone === 'info' ? Info : CheckCircle2;
-  const colors = {
-    success: 'border-emerald-500/30 bg-emerald-500/12 text-emerald-100',
-    error: 'border-rose-500/30 bg-rose-500/12 text-rose-100',
-    info: 'border-brand-500/30 bg-brand-500/12 text-brand-100',
+  const iconTone = {
+    success: 'text-emerald-400',
+    error: 'text-rose-400',
+    info: 'text-white/70 dark:text-black/70',
   }[tone];
 
+  // The toast is the inverse of the page — black on white, white on black.
   return (
     <div
       role="status"
-      className={`pointer-events-auto flex w-full max-w-md animate-fade-up items-start gap-3 rounded-2xl border px-4 py-3 text-sm font-medium shadow-glow backdrop-blur-xl ${colors} bg-ink-900/90`}
+      className="slab pointer-events-auto flex w-full max-w-md animate-fade-up items-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium shadow-lift"
     >
-      <Icon size={18} className="mt-px shrink-0" />
-      <span className="flex-1 text-white/90">{message}</span>
-      <button onClick={onClose} className="shrink-0 text-white/50 transition hover:text-white">
+      <Icon size={18} className={`mt-px shrink-0 ${iconTone}`} />
+      <span className="flex-1">{message}</span>
+      <button onClick={onClose} className="slab-muted shrink-0 transition hover:opacity-100">
         <X size={16} />
       </button>
     </div>

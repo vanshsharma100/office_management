@@ -105,8 +105,20 @@ const DEPARTMENTS = [
   { code: 'MANAGERS', name: 'Managers', nameHi: 'प्रबंधक', icon: 'UserCog', color: 'rose', status: 'COMING_SOON', jobRoles: [] },
 ];
 
+/**
+ * The one starter employee. Everything else — attendance, work, tasks, notices,
+ * salary extras — starts empty, so the first real numbers are the company's own.
+ */
+const STARTER_EMPLOYEE = {
+  name: 'Rahul Sharma',
+  username: 'rahul',
+  dept: 'TECHNICAL',
+  roles: ['Assembly'],
+  salary: 22000,
+};
+
+/** Only created when SEED_DEMO_DATA=true. */
 const DEMO_STAFF = [
-  { name: 'Rahul Sharma', username: 'rahul', dept: 'TECHNICAL', roles: ['Assembly'], salary: 22000 },
   { name: 'Amit Verma', username: 'amit', dept: 'TECHNICAL', roles: ['Cloning'], salary: 21000 },
   { name: 'Priya Singh', username: 'priya', dept: 'TECHNICAL', roles: ['Ready', 'Stock'], salary: 24000 },
   { name: 'Sandeep Kumar', username: 'sandeep', dept: 'TECHNICAL', roles: ['Returns / QC'], salary: 23000 },
@@ -176,16 +188,39 @@ async function main() {
   });
   console.log('  ✓ Super Admin + hidden backup account');
 
-  if (process.env.SEED_DEMO_DATA === 'false') {
-    console.log('  · Demo data skipped (SEED_DEMO_DATA=false)');
+  // ── The one starter employee ────────────────────────────────────────────
+  const starterDept = deptMap[STARTER_EMPLOYEE.dept];
+  const starterRoles = await prisma.jobRole.findMany({
+    where: { departmentId: starterDept.id, name: { in: STARTER_EMPLOYEE.roles } },
+  });
+  await prisma.user.upsert({
+    where: { username: STARTER_EMPLOYEE.username },
+    create: {
+      employeeId: 'FT-0002',
+      username: STARTER_EMPLOYEE.username,
+      passwordHash: await hash('Pass@123'),
+      name: STARTER_EMPLOYEE.name,
+      role: 'EMPLOYEE',
+      departmentId: starterDept.id,
+      salaryType: 'MONTHLY',
+      salaryAmount: STARTER_EMPLOYEE.salary,
+      jobRoles: { create: starterRoles.map((r) => ({ jobRoleId: r.id })) },
+    },
+    update: {},
+  });
+  console.log(`  ✓ 1 employee (${STARTER_EMPLOYEE.name} — ${starterDept.name} / ${STARTER_EMPLOYEE.roles[0]})`);
+
+  if (process.env.SEED_DEMO_DATA !== 'true') {
+    console.log('  · No demo data — attendance, work, tasks, notices and salary all start empty');
+    printCredentials(superUsername, backupUsername, false);
     return;
   }
 
-  // ── A demo Admin with a partial permission set ───────────────────────────
+  // ── Everything below is demo data (SEED_DEMO_DATA=true) ─────────────────
   const admin = await prisma.user.upsert({
     where: { username: 'manoj' },
     create: {
-      employeeId: 'FT-0002',
+      employeeId: 'FT-0003',
       username: 'manoj',
       passwordHash: await hash('Admin@123'),
       name: 'Manoj Tiwari',
@@ -212,7 +247,8 @@ async function main() {
   });
 
   // ── Demo employees ──────────────────────────────────────────────────────
-  const staff = [];
+  const starter = await prisma.user.findUnique({ where: { username: STARTER_EMPLOYEE.username } });
+  const staff = [starter];
   for (const [i, s] of DEMO_STAFF.entries()) {
     const dept = deptMap[s.dept];
     const roles = await prisma.jobRole.findMany({
@@ -222,7 +258,7 @@ async function main() {
     const user = await prisma.user.upsert({
       where: { username: s.username },
       create: {
-        employeeId: `FT-${String(i + 3).padStart(4, '0')}`,
+        employeeId: `FT-${String(i + 4).padStart(4, '0')}`,
         username: s.username,
         passwordHash: await hash('Pass@123'),
         name: s.name,
@@ -401,14 +437,20 @@ async function main() {
     console.log('  ✓ notices, tasks, leave requests, a query and pay items');
   }
 
+  printCredentials(superUsername, backupUsername, true);
+}
+
+function printCredentials(superUsername, backupUsername, demo) {
   console.log('\n  Sign-in details');
   console.log('  ───────────────────────────────────────────');
   console.log(`  Super Admin   ${superUsername} / ${process.env.SUPER_ADMIN_PASSWORD || 'Admin@123'}`);
-  console.log('  Admin         manoj / Admin@123');
   console.log('  Employee      rahul / Pass@123   (Technical → Assembly)');
-  console.log('  Employee      sandeep / Pass@123 (Technical → Returns / QC)');
-  console.log('  Employee      vikas / Pass@123   (Packing & Cleaning)');
-  console.log('  Employee      mohit / Pass@123   (Listing — Coming Soon)');
+  if (demo) {
+    console.log('  Admin         manoj / Admin@123');
+    console.log('  Employee      sandeep / Pass@123 (Technical → Returns / QC)');
+    console.log('  Employee      vikas / Pass@123   (Packing & Cleaning)');
+    console.log('  Employee      mohit / Pass@123   (Listing — Coming Soon)');
+  }
   console.log('  ───────────────────────────────────────────');
   console.log(`  Hidden backup ${backupUsername} (not listed anywhere in the UI)\n`);
 }

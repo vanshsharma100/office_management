@@ -50,12 +50,12 @@ export default function DepartmentDetail() {
         <ArrowLeft size={15} /> All departments
       </Link>
 
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-brand-600 to-violet-700 p-6 text-white shadow-lift">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+      <div className="slab relative overflow-hidden p-6 shadow-lift">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/[.06] blur-3xl dark:bg-black/[.06]" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-2xl font-bold sm:text-3xl">{t(d.name, d.nameHi)}</h1>
-            <p className="mt-1 text-sm text-white/70">
+            <h1 className="font-display text-2xl font-bold tracking-tightest sm:text-3xl">{t(d.name, d.nameHi)}</h1>
+            <p className="slab-muted mt-1 text-sm">
               {data.members.length} member{data.members.length === 1 ? '' : 's'} · {d.jobRoles.length} job role
               {d.jobRoles.length === 1 ? '' : 's'} · {prettyMonth(month)}
             </p>
@@ -71,7 +71,7 @@ export default function DepartmentDetail() {
           </div>
           <div className="text-right">
             <p className="font-display text-4xl font-bold tabular-nums">{num(data.work.totalUnits)}</p>
-            <p className="text-xs uppercase tracking-wide text-white/60">units this month</p>
+            <p className="slab-muted text-xs uppercase tracking-wide">units this month</p>
           </div>
         </div>
 
@@ -79,15 +79,18 @@ export default function DepartmentDetail() {
         {d.target > 0 && (
           <div className="relative mt-5">
             <div className="mb-1.5 flex justify-between text-xs font-semibold">
-              <span className="inline-flex items-center gap-1 text-white/70">
+              <span className="slab-muted inline-flex items-center gap-1">
                 <Target size={13} /> Target {num(d.target)}
               </span>
               <span>
                 {data.progress >= 100 ? 'Target met' : `${num(d.target - data.work.totalUnits)} pending`} · {data.progress}%
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/15">
-              <div className="h-full rounded-full bg-white transition-all duration-500" style={{ width: `${data.progress}%` }} />
+            <div className="h-2 overflow-hidden rounded-full bg-white/20 dark:bg-black/20">
+              <div
+                className="h-full rounded-full bg-white transition-all duration-500 dark:bg-black"
+                style={{ width: `${data.progress}%` }}
+              />
             </div>
           </div>
         )}

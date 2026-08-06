@@ -40,11 +40,13 @@ function MySalary() {
 
       <MonthSwitcher month={month} setMonth={setMonth} />
 
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-emerald-600 to-teal-700 p-6 text-white shadow-lift">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-        <p className="relative text-sm text-white/70">Salary so far · {prettyMonth(month)}</p>
-        <p className="relative mt-1 font-display text-4xl font-bold tabular-nums sm:text-5xl">{moneyExact(salary.net)}</p>
-        <p className="relative mt-2 text-sm text-white/70">
+      <div className="slab relative overflow-hidden p-6 shadow-lift">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/[.06] blur-3xl dark:bg-black/[.06]" />
+        <p className="slab-muted relative text-sm">Salary so far · {prettyMonth(month)}</p>
+        <p className="relative mt-1 font-display text-4xl font-bold tracking-tightest tabular-nums sm:text-5xl">
+          {moneyExact(salary.net)}
+        </p>
+        <p className="slab-muted relative mt-2 text-sm">
           {salary.paidDays} paid day{salary.paidDays === 1 ? '' : 's'} of {salary.daysInMonth}
           {salary.salaryType === 'HOURLY' ? ` · ${salary.hours} hours` : ''}
         </p>
