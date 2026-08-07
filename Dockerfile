@@ -22,6 +22,9 @@ RUN apk add --no-cache openssl curl
 COPY package*.json ./
 COPY server/package.json ./server/
 COPY web/package.json ./web/
+# Must land before install: the root postinstall runs this, and npm resolves it
+# relative to /app. Without it the install fails on a missing module.
+COPY scripts ./scripts
 RUN npm install --omit=dev --workspace server --include-workspace-root
 
 COPY server ./server

@@ -16,5 +16,7 @@ README.md
 DEPLOY.md
 Caddyfile
 docker-compose.yml
-scripts
 backups
+# scripts/ is NOT ignored — the root postinstall runs scripts/fix-prisma-engines.mjs
+# during the image build, so it has to be in the context.
+scripts/*.sh
