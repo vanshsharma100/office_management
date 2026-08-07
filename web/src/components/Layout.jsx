@@ -14,6 +14,7 @@ import {
   Wallet,
   History,
   Settings,
+  Fingerprint,
   LogOut,
   Menu,
   X,
@@ -45,6 +46,13 @@ export function useNavigation() {
       { to: '/queries', label: 'Questions', hi: 'प्रश्न', icon: MessageCircleQuestion, show: true },
       { to: '/salary', label: isStaff ? 'Payroll' : 'My Salary', hi: 'वेतन', icon: Wallet, show: can('salary.view') || isEmployee },
       { to: '/history', label: 'History Log', hi: 'इतिहास', icon: History, show: can('audit.view') },
+      {
+        to: '/attendance-sync',
+        label: 'Attendance Sync',
+        hi: 'उपस्थिति सिंक',
+        icon: Fingerprint,
+        show: isSuperAdmin,
+      },
       { to: '/settings', label: 'Settings', hi: 'सेटिंग', icon: Settings, show: true },
     ];
     return items.filter((i) => i.show);

@@ -19,6 +19,7 @@ import Queries from './pages/Queries';
 import Salary from './pages/Salary';
 import HistoryLog from './pages/HistoryLog';
 import SettingsPage from './pages/Settings';
+import AttendanceSync from './pages/AttendanceSync';
 import NotFound from './pages/NotFound';
 
 function Protected({ children }) {
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="salary" element={<Salary />} />
         <Route path="history" element={<HistoryLog />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="attendance-sync" element={<AttendanceSync />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

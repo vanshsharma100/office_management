@@ -16,6 +16,7 @@ export function publicUser(user) {
   return {
     id: user.id,
     employeeId: user.employeeId,
+    biometricId: user.biometricId, // the punch UID this person is linked to
     username: user.username,
     name: user.name,
     role: user.role,

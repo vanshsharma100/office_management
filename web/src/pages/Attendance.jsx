@@ -320,7 +320,7 @@ function Holidays() {
   const { toast } = useUI();
   const [holidays, setHolidays] = useState(null);
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ date: todayISO(), name: '', nameHi: '' });
+  const [form, setForm] = useState({ date: todayISO(), name: '', nameHi: '', type: 'HOLIDAY' });
 
   const load = () =>
     api
@@ -335,9 +335,13 @@ function Holidays() {
   const save = async () => {
     try {
       await api.post('/attendance/holidays', { ...form, nameHi: form.nameHi || null });
-      toast('Holiday declared. It will not reduce anyone’s monthly salary.');
+      toast(
+        form.type === 'UNIVERSAL_OFF'
+          ? 'Universal off declared. Nobody is marked absent and no salary is deducted.'
+          : 'Holiday declared. It will not reduce anyone’s monthly salary.'
+      );
       setAdding(false);
-      setForm({ date: todayISO(), name: '', nameHi: '' });
+      setForm({ date: todayISO(), name: '', nameHi: '', type: 'HOLIDAY' });
       load();
     } catch (e) {
       toast(e.message, 'error');
@@ -379,7 +383,10 @@ function Holidays() {
             <li key={h.id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-100/60 p-3 dark:bg-white/5">
               <div className="min-w-0">
                 <p className="truncate font-semibold">{h.name}</p>
-                <p className="text-xs text-ink-500 dark:text-ink-400">{prettyDate(h.date)}</p>
+                <p className="text-xs text-ink-500 dark:text-ink-400">
+                  {prettyDate(h.date)}
+                  {h.type === 'UNIVERSAL_OFF' ? ' · universal off' : ''}
+                </p>
               </div>
               {can('holidays.manage') && (
                 <button
@@ -411,6 +418,29 @@ function Holidays() {
         }
       >
         <div className="space-y-4">
+          <Field label="Type" hint="Both are fully paid and never counted as absent">
+            <div className="flex gap-2">
+              {[
+                { value: 'HOLIDAY', label: 'Holiday', hint: 'A festival or declared holiday' },
+                { value: 'UNIVERSAL_OFF', label: 'Universal off', hint: 'Office closed for everyone' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={form.type === opt.value}
+                  onClick={() => setForm({ ...form, type: opt.value })}
+                  className={`flex-1 rounded-lg border p-3 text-left transition ${
+                    form.type === opt.value
+                      ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900'
+                      : 'border-ink-200 dark:border-ink-700'
+                  }`}
+                >
+                  <span className="block text-sm font-medium">{opt.label}</span>
+                  <span className="block text-xs opacity-70">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+          </Field>
           <Field label="Date">
             <input type="date" className="input" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </Field>

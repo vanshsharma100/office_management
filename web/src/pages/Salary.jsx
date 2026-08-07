@@ -42,14 +42,21 @@ function MySalary() {
 
       <div className="slab relative overflow-hidden p-6 shadow-lift">
         <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/[.06] blur-3xl dark:bg-black/[.06]" />
-        <p className="slab-muted relative text-sm">Salary so far · {prettyMonth(month)}</p>
+        <p className="slab-muted relative text-sm">Salary for {prettyMonth(month)}</p>
         <p className="relative mt-1 font-display text-4xl font-bold tracking-tightest tabular-nums sm:text-5xl">
           {moneyExact(salary.net)}
         </p>
         <p className="slab-muted relative mt-2 text-sm">
           {salary.paidDays} paid day{salary.paidDays === 1 ? '' : 's'} of {salary.daysInMonth}
           {salary.salaryType === 'HOURLY' ? ` · ${salary.hours} hours` : ''}
+          {salary.deductions?.total ? ` · ${moneyExact(salary.deductions.total)} deducted` : ''}
         </p>
+        {salary.naDays > 0 && (
+          <p className="slab-muted relative mt-2 text-sm">
+            {salary.naDays} day{salary.naDays === 1 ? '' : 's'} not collected from the attendance
+            machine yet — nothing has been deducted for {salary.naDays === 1 ? 'it' : 'them'}.
+          </p>
+        )}
         {salary.locked && (
           <Badge tone="amber" className="relative mt-3">
             <Lock size={11} /> month locked — paid
@@ -61,14 +68,42 @@ function MySalary() {
         <Card className="p-5">
           <SectionTitle title="Breakdown" icon={Wallet} />
           <dl className="space-y-3">
-            <Row label={`Base (${salary.salaryType.toLowerCase()})`} value={moneyExact(salary.base)} />
+            <Row
+              label={salary.salaryType === 'MONTHLY' ? 'Monthly salary' : 'Earned (hourly)'}
+              value={moneyExact(salary.gross ?? salary.base)}
+            />
             <Row
               label={salary.salaryType === 'MONTHLY' ? 'Per day rate' : 'Hourly rate'}
               value={moneyExact(salary.salaryType === 'MONTHLY' ? salary.perDay : salary.salaryAmount)}
             />
+
+            {/* Every rupee taken off, and the reason for it. An employee should
+                never have to ask why the number moved. */}
+            {salary.deductions?.absent > 0 && (
+              <Row
+                label={`Absent · ${salary.absentDays} day${salary.absentDays === 1 ? '' : 's'}`}
+                value={`− ${moneyExact(salary.deductions.absent)}`}
+                tone="red"
+              />
+            )}
+            {salary.deductions?.halfDay > 0 && (
+              <Row
+                label={`Half days · ${salary.halfDays}`}
+                value={`− ${moneyExact(salary.deductions.halfDay)}`}
+                tone="red"
+              />
+            )}
+            {salary.deductions?.unpaidLeave > 0 && (
+              <Row
+                label={`Unpaid leave · ${salary.unpaidLeaveDays} day${salary.unpaidLeaveDays === 1 ? '' : 's'}`}
+                value={`− ${moneyExact(salary.deductions.unpaidLeave)}`}
+                tone="red"
+              />
+            )}
+
             <Row label="Incentive" value={`+ ${moneyExact(salary.incentive)}`} tone="green" />
             <Row label="Bonus" value={`+ ${moneyExact(salary.bonus)}`} tone="green" />
-            <Row label="Deduction" value={`− ${moneyExact(salary.deduction)}`} tone="red" />
+            <Row label="Other deduction" value={`− ${moneyExact(salary.deduction)}`} tone="red" />
             <div className="border-t border-ink-200/70 pt-3 dark:border-white/10">
               <Row label="Net payable" value={moneyExact(salary.net)} big />
             </div>

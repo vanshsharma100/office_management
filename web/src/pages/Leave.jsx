@@ -16,6 +16,9 @@ const TYPES = [
   { value: 'OTHER', label: 'Other', hint: 'Type your own reason' },
 ];
 
+/** Which option the approve dialog pre-selects. The approver can always change it. */
+const PAID_BY_DEFAULT = ['SICK', 'PAID', 'WFH', 'CASUAL'];
+
 export default function Leave() {
   const { can, isEmployee } = useAuth();
   const [tab, setTab] = useState(can('leave.approve') ? 'requests' : 'mine');
@@ -38,7 +41,11 @@ function AllRequests() {
   const [requests, setRequests] = useState(null);
   const [filter, setFilter] = useState('PENDING');
   const [reviewing, setReviewing] = useState(null);
+  const [approving, setApproving] = useState(null);
   const [note, setNote] = useState('');
+  // Whether the leave pays is the approver's call, not the leave type's. The
+  // type only decides which option is pre-selected.
+  const [isPaid, setIsPaid] = useState(true);
 
   const load = useCallback(() => {
     api
@@ -53,14 +60,20 @@ function AllRequests() {
 
   const review = async (id, decision) => {
     try {
-      await api.post(`/leave/${id}/review`, { decision, note: note || null });
+      await api.post(`/leave/${id}/review`, {
+        decision,
+        note: note || null,
+        ...(decision === 'APPROVE' ? { isPaid } : {}),
+      });
       toast(
         decision === 'APPROVE'
-          ? 'Approved — attendance updated automatically for those days.'
+          ? `Approved as ${isPaid ? 'paid' : 'unpaid'} — attendance and salary updated for those days.`
           : 'Rejected. The employee will see it in their leave history.'
       );
       setReviewing(null);
+      setApproving(null);
       setNote('');
+      setIsPaid(true);
       load();
     } catch (e) {
       toast(e.message, 'error');
@@ -118,7 +131,13 @@ function AllRequests() {
 
               {r.status === 'PENDING' && (
                 <div className="mt-3 flex gap-2 border-t border-ink-200/70 pt-3 dark:border-white/10">
-                  <button onClick={() => review(r.id, 'APPROVE')} className="btn-success btn-sm flex-1">
+                  <button
+                    onClick={() => {
+                      setIsPaid(PAID_BY_DEFAULT.includes(r.type));
+                      setApproving(r);
+                    }}
+                    className="btn-success btn-sm flex-1"
+                  >
                     <CheckCircle2 size={15} /> Approve
                   </button>
                   <button onClick={() => setReviewing(r)} className="btn-ghost btn-sm flex-1">
@@ -150,6 +169,52 @@ function AllRequests() {
       >
         <Field label="Note for the employee (optional)">
           <textarea className="input min-h-24" value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+      </Modal>
+
+      {/* Approving asks the one question salary depends on: does this pay? */}
+      <Modal
+        open={Boolean(approving)}
+        onClose={() => setApproving(null)}
+        size="sm"
+        title="Approve leave request"
+        subtitle={approving ? `${approving.user.name} · ${approving.fromDate} → ${approving.toDate}` : ''}
+        footer={
+          <>
+            <button onClick={() => setApproving(null)} className="btn-ghost">
+              Cancel
+            </button>
+            <button onClick={() => review(approving.id, 'APPROVE')} className="btn-success">
+              Approve as {isPaid ? 'paid' : 'unpaid'}
+            </button>
+          </>
+        }
+      >
+        <Field label="Does this leave pay?">
+          <div className="flex gap-2">
+            {[
+              { paid: true, label: 'Paid', hint: 'Salary is unaffected' },
+              { paid: false, label: 'Unpaid', hint: 'One day of salary is deducted per day' },
+            ].map((opt) => (
+              <button
+                key={opt.label}
+                type="button"
+                aria-pressed={isPaid === opt.paid}
+                onClick={() => setIsPaid(opt.paid)}
+                className={`flex-1 rounded-lg border p-3 text-left transition ${
+                  isPaid === opt.paid
+                    ? 'border-ink-900 bg-ink-900 text-white dark:border-white dark:bg-white dark:text-ink-900'
+                    : 'border-ink-200 dark:border-ink-700'
+                }`}
+              >
+                <span className="block font-medium">{opt.label}</span>
+                <span className="block text-xs opacity-70">{opt.hint}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Note for the employee (optional)" className="mt-4">
+          <textarea className="input min-h-20" value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
       </Modal>
     </div>
