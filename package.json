@@ -11,6 +11,7 @@
     "postinstall": "node scripts/fix-prisma-engines.mjs && prisma generate --schema server/prisma/schema.prisma",
     "setup": "npm install && npm run db:setup",
     "db:setup": "npm run db:push -w server && npm run db:seed -w server",
+    "db:check": "node scripts/check-db.mjs",
     "db:push": "npm run db:push -w server",
     "db:seed": "npm run db:seed -w server",
     "db:studio": "npm run db:studio -w server",
