@@ -19,10 +19,22 @@ export const ATTENDANCE_STATUS = {
   HALF_DAY: 'HALF_DAY',
   WFH: 'WFH',
   HOLIDAY: 'HOLIDAY',
+  WEEKLY_OFF: 'WEEKLY_OFF',
 };
 
-/** Days that pay in full when salary is MONTHLY. */
-export const PAID_ATTENDANCE = ['PRESENT', 'WFH', 'HOLIDAY', 'LEAVE'];
+/**
+ * Days that pay in full when salary is MONTHLY.
+ * LEAVE is deliberately absent — whether a leave pays is decided by the
+ * approver on the request itself (LeaveRequest.isPaid), not by the day.
+ */
+export const PAID_ATTENDANCE = ['PRESENT', 'WFH', 'HOLIDAY', 'WEEKLY_OFF'];
+
+/**
+ * A day with no attendance row is only "absent" once the sync agent has
+ * confirmed it collected that date. Until then it is NA and costs nobody
+ * anything — see services/attendanceDerive.js.
+ */
+export const ATTENDANCE_NA = 'NA';
 
 export const LEAVE_TYPES = [
   'SICK',
@@ -117,6 +129,14 @@ export const AUDIT = {
   WORK_REJECTED: 'WORK_REJECTED',
   ATTENDANCE_MARKED: 'ATTENDANCE_MARKED',
   ATTENDANCE_CORRECTED: 'ATTENDANCE_CORRECTED',
+  ATTENDANCE_RECALCULATED: 'ATTENDANCE_RECALCULATED',
+  ATTENDANCE_POLICY_UPDATED: 'ATTENDANCE_POLICY_UPDATED',
+  PRESENCE_REQUESTED: 'PRESENCE_REQUESTED',
+  PRESENCE_APPROVED: 'PRESENCE_APPROVED',
+  PRESENCE_REJECTED: 'PRESENCE_REJECTED',
+  SYNC_AGENT_CREATED: 'SYNC_AGENT_CREATED',
+  SYNC_AGENT_REVOKED: 'SYNC_AGENT_REVOKED',
+  BIOMETRIC_MAPPED: 'BIOMETRIC_MAPPED',
   HOLIDAY_DECLARED: 'HOLIDAY_DECLARED',
   HOLIDAY_REMOVED: 'HOLIDAY_REMOVED',
   LEAVE_REQUESTED: 'LEAVE_REQUESTED',

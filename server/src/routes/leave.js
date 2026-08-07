@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
-import { AUDIT, LEAVE_TYPES, ATTENDANCE_STATUS } from '../lib/constants.js';
+import { AUDIT, LEAVE_TYPES, ATTENDANCE_STATUS, PAID_LEAVE_TYPES } from '../lib/constants.js';
 import { logAudit } from '../lib/audit.js';
 import {
   requireAuth,
@@ -72,8 +72,14 @@ router.post(
   '/:id/review',
   requirePermission('leave.approve'),
   asyncHandler(async (req, res) => {
-    const { decision, note } = z
-      .object({ decision: z.enum(['APPROVE', 'REJECT']), note: z.string().nullish() })
+    const { decision, note, isPaid } = z
+      .object({
+        decision: z.enum(['APPROVE', 'REJECT']),
+        note: z.string().nullish(),
+        // The approver decides whether this leave costs the employee money.
+        // Defaults to the leave type's convention, but the decision is theirs.
+        isPaid: z.boolean().optional(),
+      })
       .parse(req.body);
 
     const request = await prisma.leaveRequest.findUnique({
@@ -87,10 +93,12 @@ router.post(
     if (request.status !== 'PENDING') throw new HttpError(400, 'This request was already decided');
 
     const approved = decision === 'APPROVE';
+    const paid = isPaid ?? PAID_LEAVE_TYPES.includes(request.type);
     const updated = await prisma.leaveRequest.update({
       where: { id: request.id },
       data: {
         status: approved ? 'APPROVED' : 'REJECTED',
+        isPaid: approved ? paid : null,
         reviewedById: req.user.id,
         reviewedAt: new Date(),
         reviewNote: note ?? null,
@@ -114,11 +122,16 @@ router.post(
             userId: request.userId,
             date,
             status,
-            note: `${request.type} leave approved`,
+            note: `${request.type} leave approved (${paid ? 'paid' : 'unpaid'})`,
             markedById: req.user.id,
             source: 'SYSTEM',
           },
-          update: { status, note: `${request.type} leave approved`, markedById: req.user.id, source: 'SYSTEM' },
+          update: {
+            status,
+            note: `${request.type} leave approved (${paid ? 'paid' : 'unpaid'})`,
+            markedById: req.user.id,
+            source: 'SYSTEM',
+          },
         });
       }
     }

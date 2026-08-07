@@ -21,6 +21,7 @@ import queryRoutes from './routes/queries.js';
 import salaryRoutes from './routes/salary.js';
 import dashboardRoutes from './routes/dashboard.js';
 import auditRoutes from './routes/audit.js';
+import syncRoutes from './routes/sync.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -63,6 +64,7 @@ export function createApp() {
   app.use('/api/salary', salaryRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/audit', auditRoutes);
+  app.use('/api/sync', syncRoutes);
 
   // In production the API also serves the built frontend, so one container
   // and one port is all a deployment needs.

@@ -11,8 +11,9 @@ import {
   visibleUsersFilter,
 } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
-import { todayISO, monthRange, currentMonth, monthOf } from '../lib/dates.js';
+import { todayISO, monthRange, currentMonth, monthOf, addDays } from '../lib/dates.js';
 import { isMonthLocked } from '../services/salary.js';
+import { getPolicy, deriveDate } from '../services/attendanceDerive.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -198,6 +199,7 @@ router.post(
         note: body.note ?? null,
         markedById: req.user.id,
         source: 'ADMIN',
+        lockedByAdmin: true,
       },
       update: {
         status: body.status,
@@ -205,6 +207,9 @@ router.post(
         note: body.note ?? null,
         markedById: req.user.id,
         source: 'ADMIN',
+        // A human has ruled on this day. The sync agent must never overturn it,
+        // or a correction made at 3pm is quietly undone by the 3:15 batch.
+        lockedByAdmin: true,
       },
     });
 
@@ -289,6 +294,8 @@ router.post(
         name: z.string().min(2),
         nameHi: z.string().nullish(),
         note: z.string().nullish(),
+        // UNIVERSAL_OFF closes the office for everyone; both pay in full.
+        type: z.enum(['HOLIDAY', 'UNIVERSAL_OFF']).default('HOLIDAY'),
       })
       .parse(req.body);
 
@@ -323,6 +330,163 @@ router.delete(
       `Removed holiday "${holiday.name}" on ${holiday.date}`
     );
     res.json({ ok: true });
+  })
+);
+
+// ──────────────────────────────────────── Shift & attendance rules (policy)
+//
+// Every field is optional and starts blank. A rule that is not filled in
+// simply does not apply, so the office can configure this a piece at a time.
+
+router.get(
+  '/policy',
+  asyncHandler(async (_req, res) => {
+    res.json({ policy: await getPolicy() });
+  })
+);
+
+const hhmm = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a 24-hour time like 09:30')
+  .nullish();
+
+router.put(
+  '/policy',
+  requirePermission('attendance.edit'),
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        shiftStart: hhmm,
+        shiftEnd: hhmm,
+        graceMinutes: z.number().int().min(0).max(240).nullish(),
+        halfDayAfter: hhmm,
+        minHoursFullDay: z.number().min(0).max(24).nullish(),
+        minHoursHalfDay: z.number().min(0).max(24).nullish(),
+        weeklyOffDays: z.array(z.number().int().min(0).max(6)).default([]),
+        nightShift: z.boolean().default(false),
+        dayCloseTime: hhmm,
+        requestWindowDays: z.number().int().min(0).max(90).nullish(),
+        timezone: z.string().min(3).max(64).default('Asia/Kolkata'),
+      })
+      .parse(req.body);
+
+    const data = { ...body, weeklyOffDays: JSON.stringify(body.weeklyOffDays) };
+    const policy = await prisma.attendancePolicy.upsert({
+      where: { id: 'policy' },
+      create: { id: 'policy', ...data },
+      update: data,
+    });
+
+    await logAudit(
+      req.user,
+      AUDIT.ATTENDANCE_POLICY_UPDATED,
+      'AttendancePolicy',
+      'policy',
+      'Updated the shift and attendance rules'
+    );
+    // Existing days keep their old verdict until an admin recalculates, so a
+    // rule change never silently rewrites a month that has already been paid.
+    res.json({ policy });
+  })
+);
+
+// ─────────────────────────────── "I was here, the machine missed me" requests
+
+router.get(
+  '/requests',
+  asyncHandler(async (req, res) => {
+    const mine = !can(req.user, 'attendance.edit');
+    const requests = await prisma.attendanceRequest.findMany({
+      where: {
+        ...(mine ? { userId: req.user.id } : {}),
+        ...(req.query.status ? { status: String(req.query.status) } : {}),
+      },
+      include: { user: { select: { id: true, name: true, employeeId: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    res.json({ requests });
+  })
+);
+
+router.post(
+  '/requests',
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        claimedIn: hhmm,
+        claimedOut: hhmm,
+        reason: z.string().min(3).max(500),
+      })
+      .parse(req.body);
+
+    if (body.date > todayISO()) throw new HttpError(400, 'That date has not happened yet');
+
+    // The window stops anyone back-filling a month after salary has gone out.
+    const policy = await getPolicy();
+    if (policy.requestWindowDays != null) {
+      const oldest = addDays(todayISO(), -policy.requestWindowDays);
+      if (body.date < oldest) {
+        throw new HttpError(
+          400,
+          `Presence can only be requested for the last ${policy.requestWindowDays} days`
+        );
+      }
+    }
+    if (await isMonthLocked(monthOf(body.date))) {
+      throw new HttpError(409, 'That month is locked. Ask a Super Admin to unlock it first.');
+    }
+
+    const request = await prisma.attendanceRequest.upsert({
+      where: { userId_date: { userId: req.user.id, date: body.date } },
+      create: { ...body, userId: req.user.id },
+      update: { ...body, status: 'PENDING', reviewedById: null, reviewedAt: null },
+    });
+    await logAudit(
+      req.user,
+      AUDIT.PRESENCE_REQUESTED,
+      'AttendanceRequest',
+      request.id,
+      `Requested presence for ${body.date}`
+    );
+    res.status(201).json({ request });
+  })
+);
+
+router.post(
+  '/requests/:id/review',
+  requirePermission('attendance.edit'),
+  asyncHandler(async (req, res) => {
+    const { approve, note } = z
+      .object({ approve: z.boolean(), note: z.string().max(500).nullish() })
+      .parse(req.body);
+
+    const existing = await prisma.attendanceRequest.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw new HttpError(404, 'Request not found');
+    assertNotSelfAction(req.user, existing.userId, 'approve your own presence request');
+
+    const request = await prisma.attendanceRequest.update({
+      where: { id: req.params.id },
+      data: {
+        status: approve ? 'APPROVED' : 'REJECTED',
+        reviewedById: req.user.id,
+        reviewedAt: new Date(),
+        reviewNote: note ?? null,
+      },
+    });
+
+    // Rebuild that day so the approval lands in attendance immediately.
+    if (approve) await deriveDate(request.date);
+
+    await logAudit(
+      req.user,
+      approve ? AUDIT.PRESENCE_APPROVED : AUDIT.PRESENCE_REJECTED,
+      'AttendanceRequest',
+      request.id,
+      `${approve ? 'Approved' : 'Rejected'} presence for ${request.date}`
+    );
+    res.json({ request });
   })
 );
 

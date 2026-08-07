@@ -18,6 +18,7 @@ datasource db {
 model User {
   id           String    @id @default(cuid())
   employeeId   String    @unique // permanent, human readable: FT-0001
+  biometricId  String?   @unique // the punch UID from the attendance device
   username     String    @unique
   passwordHash String
   name         String
@@ -62,6 +63,9 @@ model User {
   payItems          PayItem[]        @relation("PayItemOwner")
   createdPayItems   PayItem[]        @relation("PayItemAuthor")
   auditLogs         AuditLog[]
+  punches           BiometricPunch[]
+  presenceRequests  AttendanceRequest[] @relation("PresenceOwner")
+  reviewedPresence  AttendanceRequest[] @relation("PresenceReviewer")
 
   @@index([role])
   @@index([departmentId])
@@ -81,6 +85,12 @@ model Department {
   autopilot Boolean  @default(false) // 10.3
   target    Int      @default(0) // 6.4 shipment / period target
   targetPeriod String @default("MONTH") // WEEK | MONTH
+
+  // Optional per-department shift overrides. Null means "use the global policy",
+  // so a single office never has to fill these in.
+  shiftStart   String? // HH:MM
+  graceMinutes Int?
+  halfDayAfter String? // HH:MM
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -185,7 +195,13 @@ model Attendance {
   hours      Float     @default(0)
   note       String?
   markedById String? // null = self check-in
-  source     String    @default("SELF") // SELF | ADMIN | SYSTEM
+  source     String    @default("SELF") // SELF | ADMIN | SYSTEM | REQUEST
+
+  // Set the moment an admin corrects a synced day. The sync agent may never
+  // touch a locked row again — otherwise a fix made at 3pm is undone at 3:15.
+  lockedByAdmin   Boolean @default(false)
+  lateMinutes     Int? // minutes past the shift start, after grace
+  missingPunchOut Boolean @default(false) // punched in, never punched out
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -202,6 +218,9 @@ model Holiday {
   name   String
   nameHi String?
   note   String?
+  // HOLIDAY = declared holiday, UNIVERSAL_OFF = office closed for everyone.
+  // Neither ever reduces anyone's salary.
+  type   String @default("HOLIDAY")
 }
 
 // ───────────────────────────────────────────────────── Leave requests (13.4)
@@ -214,6 +233,9 @@ model LeaveRequest {
   toDate       String
   reason       String
   status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  // Decided by the approver, not by the leave type. Null until approved.
+  // false is the only thing that deducts salary.
+  isPaid       Boolean?
   reviewedById String?
   reviewedAt   DateTime?
   reviewNote   String?
@@ -378,4 +400,101 @@ model AuditLog {
 model Setting {
   key   String @id
   value String
+}
+
+// ─────────────────────────────────────────── Biometric attendance sync (§new)
+//
+// Attendance is collected by the OnTime / Secure Eyes device into a SQL Server
+// Express database on an office PC. A small agent on that PC reads it and
+// pushes here over HTTPS. Nothing listens for inbound connections in the
+// office, and the SQL credentials never leave that machine.
+
+/// Raw punches, exactly as the biometric database recorded them. Kept forever
+/// so a disputed day can always be traced back to the device.
+model BiometricPunch {
+  id        String   @id @default(cuid())
+  uid       String // device user id, as printed on the machine
+  punchAt   DateTime
+  date      String // YYYY-MM-DD in office local time, decided by the agent
+  direction String? // IN | OUT | null when the device does not say
+  deviceId  String?
+  /// Vendor row identity. Unique, so re-sending a batch can never double-count.
+  sourceKey String   @unique
+  userId    String? // filled in once the uid is mapped to an employee
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([date])
+  @@index([uid])
+  @@index([userId, date])
+}
+
+/// One row per date the agent has fully accounted for. A date with no row is
+/// "NA" — not yet synced — and must never be read as absent. This is what makes
+/// three days of a switched-off office PC show as three grey days instead of
+/// unpaid absences for the whole staff.
+model AttendanceSyncDay {
+  date       String   @id // YYYY-MM-DD
+  punchCount Int      @default(0)
+  agentId    String?
+  syncedAt   DateTime @default(now())
+  /// Set once the agent confirms the day is closed and nothing more is coming.
+  isComplete Boolean  @default(false)
+}
+
+/// One registered office PC. The key is shown once at creation and stored only
+/// as a hash, so a leaked database gives an attacker nothing to sync with.
+model SyncAgent {
+  id          String    @id @default(cuid())
+  name        String
+  keyHash     String
+  keyPrefix   String // first 8 chars, so the UI can identify a key it cannot show
+  isActive    Boolean   @default(true)
+  lastSeenAt  DateTime?
+  lastSyncAt  DateTime?
+  lastError   String?
+  createdById String
+  createdAt   DateTime  @default(now())
+}
+
+/// The attendance rules, one row. Every field starts empty — the office fills
+/// them in from Settings, and nothing is derived until they are set.
+model AttendancePolicy {
+  id                String   @id @default("policy")
+  shiftStart        String? // HH:MM
+  shiftEnd          String? // HH:MM
+  graceMinutes      Int? // arriving within this many minutes is still on time
+  halfDayAfter      String? // HH:MM — arriving later than this is a half day
+  minHoursFullDay   Float? // fewer hours than this drops to half day
+  minHoursHalfDay   Float? // fewer hours than this counts as absent
+  weeklyOffDays     String   @default("[]") // JSON array, 0 = Sunday
+  nightShift        Boolean  @default(false) // shifts crossing midnight
+  dayCloseTime      String? // HH:MM — absence is only decided after this
+  requestWindowDays Int? // how far back a manual presence request may reach
+  timezone          String   @default("Asia/Kolkata")
+  updatedAt         DateTime @updatedAt
+}
+
+/// "I was here but the biometric did not take my punch." Raised by the
+/// employee, approved by an admin, and only inside the policy's window so
+/// nobody back-fills a month after salary is out.
+model AttendanceRequest {
+  id           String    @id @default(cuid())
+  userId       String
+  date         String // YYYY-MM-DD
+  claimedIn    String? // HH:MM
+  claimedOut   String? // HH:MM
+  reason       String
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+
+  user       User  @relation("PresenceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("PresenceReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([userId, date])
+  @@index([status])
 }
