@@ -6,6 +6,8 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Queries run through the `pg` driver rather than Prisma's Rust engine —
+  // see src/lib/prisma.js for why. That needs no flag on this version.
 }
 
 datasource db {
