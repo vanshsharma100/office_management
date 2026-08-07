@@ -95,11 +95,20 @@ try {
   const code = err.errorCode || err.code || '';
   console.log(`\n  ✗ Could not connect${code ? ` (${code})` : ''}`);
 
-  if (code === 'P1000') {
-    console.log('\n  The server rejected the username or password.');
-    console.log('  → Reset the password in Supabase: Settings → Database → Reset database password.');
+  // Two different failures wear similar words. Separating them matters:
+  // one means the project was not found, the other means it was.
+  if (/tenant.*not found|ENOTFOUND/i.test(err.message)) {
+    console.log('\n  Supabase could not find that project on this pooler.');
+    console.log(`  → The project ref in the username ("${user}") or the region in the host`);
+    console.log(`    ("${host}") is wrong. Copy the string from Supabase's copy button rather`);
+    console.log('    than typing it — the region must be your own project\'s.');
+  } else if (code === 'P1000') {
+    console.log('\n  Supabase found your project and rejected the password.');
+    console.log('  So the host, region and username are all correct — only the password is wrong.');
+    console.log('\n  → Reset it: Supabase → Settings → Database → Reset database password.');
+    console.log('  → Note this is the DATABASE password, not the password you log in to');
+    console.log('    Supabase with. They are different, and mixing them up is the usual cause.');
     console.log('  → Use letters and numbers only, so nothing needs URL-encoding.');
-    console.log('  → Check the username is postgres.<project-ref> for a pooler host.');
   } else if (code === 'P1001' || err.message === 'TIMEOUT') {
     console.log('\n  The server could not be reached at all — so this is not a password problem.');
     console.log('  → If the host is db.<ref>.supabase.co, switch to the Session pooler host.');
