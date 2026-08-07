@@ -17,6 +17,7 @@
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
     "build": "npm run build -w web",
+    "build:deploy": "npm run db:push -w server && npm run db:seed -w server && npm run build -w web",
     "start": "npm run start -w server",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"
