@@ -8,7 +8,7 @@
     "web"
   ],
   "scripts": {
-    "postinstall": "prisma generate --schema server/prisma/schema.prisma",
+    "postinstall": "node scripts/fix-prisma-engines.mjs && prisma generate --schema server/prisma/schema.prisma",
     "setup": "npm install && npm run db:setup",
     "db:setup": "npm run db:push -w server && npm run db:seed -w server",
     "db:push": "npm run db:push -w server",
@@ -18,7 +18,7 @@
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
     "build": "npm run build -w web",
-    "build:deploy": "npm run db:push -w server && npm run db:seed -w server && npm run build -w web",
+    "build:deploy": "node scripts/fix-prisma-engines.mjs && npm run db:push -w server && npm run db:seed -w server && npm run build -w web",
     "start": "npm run start -w server",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down"
