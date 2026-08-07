@@ -217,6 +217,53 @@ router.get(
   })
 );
 
+/**
+ * Your own profile. Anyone signed in may correct how their name is spelled and
+ * keep their contact details current, without waiting on an admin.
+ *
+ * Registered before `/:id` on purpose — otherwise "me" is read as an id.
+ *
+ * Only these three fields. Employee id, username, role, department and pay are
+ * deliberately absent: those are things the office decides about you, not
+ * things you assert about yourself. Every change is audited, so a rename is
+ * always traceable to who made it and when.
+ */
+router.patch(
+  '/me',
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        name: z.string().min(2).max(60).optional(),
+        phone: z.string().max(20).nullish(),
+        email: z.string().email().nullish().or(z.literal('')),
+      })
+      .parse(req.body);
+
+    const data = { ...body };
+    if (data.email === '') data.email = null;
+
+    const before = await prisma.user.findUnique({ where: { id: req.user.id } });
+    const user = await prisma.user.update({
+      where: { id: req.user.id },
+      data,
+      include: { department: true, jobRoles: { include: { jobRole: true } } },
+    });
+
+    await logAudit(
+      req.user,
+      AUDIT.ACCOUNT_UPDATED,
+      'User',
+      user.id,
+      before.name !== user.name
+        ? `Changed their own name from "${before.name}" to "${user.name}"`
+        : 'Updated their own contact details',
+      body
+    );
+
+    res.json({ user: listUser(user, { includePay: true }) });
+  })
+);
+
 router.patch(
   '/:id',
   requirePermission('employees.edit'),

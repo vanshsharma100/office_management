@@ -7,11 +7,43 @@ import { prettyDate, prettyDateTime } from '../lib/format';
 import { Avatar, Badge, Card, Field, SectionTitle, Spinner } from '../components/ui';
 
 export default function SettingsPage() {
-  const { user, isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin, refresh } = useAuth();
   const { theme, toggleTheme, hindi, toggleHindi, toast } = useUI();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
   const [busy, setBusy] = useState(false);
   const [catalog, setCatalog] = useState(null);
+
+  const initialProfile = {
+    name: user.name ?? '',
+    phone: user.phone ?? '',
+    email: user.email ?? '',
+  };
+  const [profile, setProfile] = useState(initialProfile);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const profileChanged =
+    profile.name.trim().length >= 2 &&
+    (profile.name !== initialProfile.name ||
+      profile.phone !== initialProfile.phone ||
+      profile.email !== initialProfile.email);
+
+  const saveProfile = async (e) => {
+    e.preventDefault();
+    setSavingProfile(true);
+    try {
+      await api.patch('/users/me', {
+        name: profile.name.trim(),
+        phone: profile.phone.trim() || null,
+        email: profile.email.trim() || null,
+      });
+      // Refresh the session so the greeting and sidebar show the new name at once.
+      await refresh();
+      toast('Profile updated.');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   useEffect(() => {
     api.get('/users/permission-catalog').then((r) => setCatalog(r.data)).catch(() => {});
@@ -61,6 +93,36 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          <form onSubmit={saveProfile} className="mt-5 space-y-3 border-t border-ink-200/70 pt-4 dark:border-white/10">
+            <Field label="Your name" hint="This is the name shown in your greeting and across the app">
+              <input
+                className="input"
+                value={profile.name}
+                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+              />
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Phone">
+                <input
+                  className="input"
+                  value={profile.phone}
+                  onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                />
+              </Field>
+              <Field label="Email">
+                <input
+                  type="email"
+                  className="input"
+                  value={profile.email}
+                  onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                />
+              </Field>
+            </div>
+            <button type="submit" className="btn-primary" disabled={savingProfile || !profileChanged}>
+              {savingProfile ? 'Saving…' : 'Save profile'}
+            </button>
+          </form>
+
           <dl className="mt-5 space-y-2.5 border-t border-ink-200/70 pt-4 text-sm dark:border-white/10">
             <div className="flex justify-between gap-3">
               <dt className="text-ink-500">Joined</dt>
@@ -70,16 +132,11 @@ export default function SettingsPage() {
               <dt className="text-ink-500">Last sign in</dt>
               <dd className="font-medium">{prettyDateTime(user.lastLoginAt)}</dd>
             </div>
-            {user.phone && (
-              <div className="flex justify-between gap-3">
-                <dt className="text-ink-500">Phone</dt>
-                <dd className="font-medium">{user.phone}</dd>
-              </div>
-            )}
           </dl>
 
           <p className="mt-4 text-xs text-ink-500">
-            Your department and job role are set by an Admin and cannot be changed here.
+            Your employee ID, username, department, job role and pay are set by an Admin. Name
+            changes are recorded in the history log.
           </p>
         </Card>
 
