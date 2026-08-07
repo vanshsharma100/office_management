@@ -66,11 +66,29 @@ npm install
 ```
 
 ```bash
-copy config.example.json config.json
+npm run init
 ```
 
-Open `config.json` in Notepad and fill in `apiUrl`, `agentKey`, and the `sql`
-block. Leave `query` alone for now.
+That creates your settings file **outside this folder**, at:
+
+```
+C:\ProgramData\Ftech\sync-agent\config.json
+```
+
+Deliberately outside. The SQL password and the agent key live in there, and a
+`git pull` or a re-clone of this repo must never be able to wipe them or sweep
+them into a commit. The agent's cursor (`state.json`) sits beside it for the
+same reason — update the code freely, the settings and sync position stay put.
+
+`npm run init` prints an `icacls` command. Run it. It stops every user account
+on that PC from reading the SQL password.
+
+Open that `config.json` in Notepad and fill in `apiUrl`, `agentKey`, and the
+`sql` block. Leave `query` alone for now.
+
+> Need it somewhere else? Pass `--config D:\somewhere\config.json` to any
+> command, or set `FTECH_AGENT_CONFIG`. A `config.json` left inside `agent/`
+> from an older install is still picked up, so nothing breaks on upgrade.
 
 **Find the right table.** Every vendor names these differently:
 
@@ -149,7 +167,14 @@ backfills their history — nothing is lost while a new joiner is unmapped.
 
 ## Files
 
+Both live in `C:\ProgramData\Ftech\sync-agent\`, outside this repo, so updating
+the code never touches them.
+
 | File | |
 |---|---|
-| `config.json` | Your settings and secrets. Gitignored. Never commit it. |
+| `config.json` | Your settings and secrets. Never commit it, never email it. |
 | `state.json` | How far the sync got. Delete it to re-read from the start. |
+
+Back up `config.json` somewhere safe. The agent key inside it cannot be shown
+again — if you lose it you must revoke that PC in the web app and register it
+afresh.

@@ -1,6 +1,11 @@
-import { loadConfig, loadState, saveState } from './config.js';
-import { connect, fetchPunches, countByDate, listTables, listColumns, close } from './db.js';
+import { loadConfig, loadState, saveState, initConfig, statePathFor } from './config.js';
 import { Api } from './api.js';
+
+// Loaded on first use. `--init` and every config error must still work on a PC
+// where `npm install` has not run yet — otherwise the first thing a new
+// install shows you is a missing-driver stack trace instead of what to fix.
+let dbModule;
+const db = async () => (dbModule ??= await import('./db.js'));
 
 /**
  * The Ftech attendance sync agent.
@@ -37,6 +42,7 @@ function shiftDate(dateISO, days) {
 }
 
 async function discover(cfg) {
+  const { connect, listTables, listColumns, close } = await db();
   const pool = await connect(cfg);
   const tables = await listTables(pool);
   console.log(`\n${tables.length} tables in ${cfg.sql.database}:\n`);
@@ -56,6 +62,7 @@ async function discover(cfg) {
 }
 
 async function showColumns(cfg, table) {
+  const { connect, listColumns, close } = await db();
   const pool = await connect(cfg);
   const cols = await listColumns(pool, table);
   if (!cols.length) console.log(`No table named ${table}.`);
@@ -64,6 +71,7 @@ async function showColumns(cfg, table) {
 }
 
 async function testConnection(cfg) {
+  const { connect, fetchPunches, close } = await db();
   log('Testing the web app...');
   const hello = await new Api(cfg).hello();
   log(`  connected as agent "${hello.agent.name}"; office timezone ${hello.timezone}`);
@@ -81,7 +89,8 @@ async function testConnection(cfg) {
 
 /** One pass: drain everything new, then confirm which days are fully collected. */
 async function runOnce(cfg, api) {
-  const state = loadState();
+  const { connect, fetchPunches, countByDate, close } = await db();
+  const state = loadState(cfg.__configPath);
   const pool = await connect(cfg);
   const tz = cfg.sync.timezone;
   let sent = 0;
@@ -112,7 +121,7 @@ async function runOnce(cfg, api) {
     const last = rows[rows.length - 1];
     if (last.RowId != null) state.lastId = Number(last.RowId);
     state.lastPunchAt = new Date(last.PunchAt).toISOString();
-    saveState(state);
+    saveState(cfg.__configPath, state);
 
     if (rows.length < (cfg.sync.batchSize || 500)) break;
   }
@@ -136,7 +145,7 @@ async function runOnce(cfg, api) {
     }
     // Keep only the window; this list must not grow without bound.
     state.completedDates = [...done].filter((d) => d >= from).sort();
-    saveState(state);
+    saveState(cfg.__configPath, state);
   }
 
   await close();
@@ -151,7 +160,27 @@ function normaliseDirection(value) {
   return null; // unknown encoding: let the web app use first/last punch instead
 }
 
+/**
+ * Put a config template somewhere a code update cannot reach. The settings
+ * hold the SQL password and the API key; they must outlive `git pull`.
+ */
+function runInit() {
+  const { target, created } = initConfig();
+  const dir = target.replace(/[\\/][^\\/]+$/, '');
+  console.log(created ? `\nCreated ${target}` : `\n${target} already exists — left untouched.`);
+  console.log(`\nNext:\n  1. Open it and fill in apiUrl, agentKey and the sql block.`);
+  if (process.platform === 'win32') {
+    console.log(`\n  2. Lock it down so only administrators can read the password:`);
+    console.log(`       icacls "${dir}" /inheritance:r /grant:r "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F"`);
+  } else {
+    console.log(`\n  2. Lock it down:  chmod 600 ${target}`);
+  }
+  console.log(`\n  3. Check both ends:  npm run test-connection\n`);
+}
+
 async function main() {
+  if (argv.has('--init')) return runInit();
+
   let cfg;
   try {
     cfg = loadConfig();
@@ -159,6 +188,8 @@ async function main() {
     console.error(`\n${err.message}\n`);
     process.exit(1);
   }
+  log(`Using settings from ${cfg.__configPath}`);
+  log(`Cursor stored at ${statePathFor(cfg.__configPath)}`);
 
   if (argv.has('--discover')) return discover(cfg);
   if (argv.has('--columns')) return showColumns(cfg, process.argv[process.argv.indexOf('--columns') + 1]);
@@ -182,7 +213,7 @@ async function main() {
         log('The agent key was rejected. Fix config.json and restart — not retrying.');
         process.exit(1);
       }
-      await close().catch(() => {});
+      await dbModule?.close().catch(() => {});
     }
   };
 
@@ -203,7 +234,7 @@ async function main() {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, async () => {
     log('Stopping.');
-    await close().catch(() => {});
+    await dbModule?.close().catch(() => {});
     process.exit(0);
   });
 }

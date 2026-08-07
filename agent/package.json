@@ -6,6 +6,7 @@
   "description": "Reads biometric punches from SQL Server Express on the office PC and pushes them to the Ftech Office web app.",
   "main": "src/index.js",
   "scripts": {
+    "init": "node src/index.js --init",
     "start": "node src/index.js",
     "discover": "node src/index.js --discover",
     "test-connection": "node src/index.js --test",
