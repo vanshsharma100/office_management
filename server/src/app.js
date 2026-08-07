@@ -9,6 +9,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import prisma from './lib/prisma.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import departmentRoutes from './routes/departments.js';
@@ -48,9 +49,28 @@ export function createApp() {
     rateLimit({ windowMs: 10 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false })
   );
 
-  app.get('/api/health', (_req, res) =>
-    res.json({ ok: true, service: 'ftech-office-api', time: new Date().toISOString() })
-  );
+  /**
+   * Health, including the database.
+   *
+   * The probe is raced against a timeout on purpose. When Prisma cannot start
+   * its engine it does not fail — it waits, so every request that touches data
+   * buffers forever while routes that avoid it look perfectly healthy. This
+   * turns that into an answer you can read from outside.
+   */
+  app.get('/api/health', async (_req, res) => {
+    const base = { ok: true, service: 'ftech-office-api', time: new Date().toISOString() };
+    try {
+      await Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('database did not respond within 5s')), 5000)
+        ),
+      ]);
+      res.json({ ...base, db: 'up' });
+    } catch (err) {
+      res.status(503).json({ ...base, ok: false, db: 'down', dbError: String(err.message).slice(0, 300) });
+    }
+  });
 
   app.use('/api/auth', authRoutes);
   app.use('/api/users', userRoutes);
