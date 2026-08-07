@@ -9,7 +9,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  // Postgres, not SQLite. A SQLite file needs a real filesystem with working
+  // locks; on managed hosting it sits on network storage where a lock can
+  // block forever, and the file is wiped on every redeploy — taking the
+  // attendance and salary history with it.
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

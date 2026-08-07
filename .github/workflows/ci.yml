@@ -8,6 +8,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    # A real Postgres, so CI exercises the same engine production uses rather
+    # than a file-backed stand-in that behaves differently under load and locks.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ftech
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ftech
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ftech -d ftech"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,12 +40,12 @@ jobs:
       - name: Generate Prisma client and create the schema
         run: npm run db:push -w server
         env:
-          DATABASE_URL: file:../data/ci.db
+          DATABASE_URL: postgresql://ftech:ci@localhost:5432/ftech
 
       - name: Seed
         run: npm run db:seed -w server
         env:
-          DATABASE_URL: file:../data/ci.db
+          DATABASE_URL: postgresql://ftech:ci@localhost:5432/ftech
           SEED_DEMO_DATA: 'true'
 
       - name: Smoke test the API
@@ -43,7 +61,7 @@ jobs:
           curl -fsS http://localhost:4000/api/dashboard -H "Authorization: Bearer $TOKEN" > /dev/null
           echo "API smoke test passed"
         env:
-          DATABASE_URL: file:../data/ci.db
+          DATABASE_URL: postgresql://ftech:ci@localhost:5432/ftech
           JWT_SECRET: ci-secret
 
       - name: Build the frontend

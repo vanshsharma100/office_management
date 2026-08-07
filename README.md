@@ -145,19 +145,26 @@ Incentives and bonuses add, deductions subtract.
 | | |
 |---|---|
 | **Backend** | Node 22, Express 4, Prisma 6, Zod, JWT, bcrypt, helmet |
-| **Database** | SQLite by default — zero setup. One line switches it to Postgres. |
+| **Database** | Postgres. `docker compose` brings one up; Supabase works too. |
 | **Frontend** | React 18, Vite 6, Tailwind 3, Recharts, React Router 6 |
 | **Deploy** | Multi-stage Dockerfile, docker compose, GitHub Actions CI |
 
-### Switching to Postgres
+### A database to develop against
 
-1. In [`server/prisma/schema.prisma`](server/prisma/schema.prisma), change
-   `provider = "sqlite"` to `provider = "postgresql"`.
-2. Set `DATABASE_URL=postgresql://user:pass@host:5432/ftech`.
-3. `npm run db:push -w server && npm run db:seed -w server`.
+`docker compose up -d db` gives you one, or run it directly:
 
-The schema avoids Prisma enums and `Json` columns specifically so it runs on
-either engine unchanged.
+```bash
+docker run -d --name ftech-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_USER=ftech -e POSTGRES_DB=ftech -p 5432:5432 postgres:16-alpine
+```
+
+Then `DATABASE_URL="postgresql://ftech:dev@localhost:5432/ftech"` in `.env` and
+`npm run db:push && npm run db:seed`. A free Supabase project works just as
+well if you would rather not run one locally.
+
+> SQLite was the original default and has been dropped. On managed hosting the
+> file lands on network storage where a lock can block forever — the symptom is
+> an app that answers every page except the ones that read data — and the file
+> is wiped on each redeploy, taking the attendance and salary history with it.
 
 ---
 
