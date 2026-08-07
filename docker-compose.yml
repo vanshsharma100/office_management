@@ -9,22 +9,46 @@ services:
     container_name: ftech-office
     restart: unless-stopped
     ports:
-      - '4000:4000'
+      # Bound to localhost, not 0.0.0.0 — Caddy is the only public door. This
+      # still lets you `curl localhost:4000/api/health` over SSH.
+      - '127.0.0.1:4000:4000'
     environment:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: file:/app/server/data/ftech.db
-      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-string}
+      # No default: refusing to start beats starting with a public secret.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — run `openssl rand -hex 32`}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4000}
       SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-superadmin}
-      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-Admin@123}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:?set SUPER_ADMIN_PASSWORD in .env}
       BACKUP_ADMIN_USERNAME: ${BACKUP_ADMIN_USERNAME:-ftech.backup}
-      BACKUP_ADMIN_PASSWORD: ${BACKUP_ADMIN_PASSWORD:-Backup@123}
-      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-true}
+      BACKUP_ADMIN_PASSWORD: ${BACKUP_ADMIN_PASSWORD:?set BACKUP_ADMIN_PASSWORD in .env}
+      # Demo staff must never appear in a real deployment.
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
     volumes:
       # Records must survive a redeploy — Section 15 is not optional.
       - ftech-data:/app/server/data
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: ftech-caddy
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here. Losing this volume means re-issuing them, and
+      # Let's Encrypt rate-limits that.
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
 volumes:
   ftech-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,24 @@
+# The public door. Caddy terminates HTTPS and forwards to the app container.
+#
+# It obtains and renews the certificate automatically — there is nothing to
+# configure here beyond DOMAIN in your .env file:
+#
+#   DOMAIN=office.yourdomain.com   ->  real Let's Encrypt certificate
+#   DOMAIN=localhost   (default)   ->  local self-signed cert, for testing only
+#
+# HTTPS is not optional: the login cookie is set `secure` when NODE_ENV is
+# production, so over plain HTTP the browser drops it and nobody can sign in.
+
+{$DOMAIN:localhost} {
+	encode gzip
+
+	# The app serves both /api and the built frontend on one port.
+	reverse_proxy app:4000
+
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

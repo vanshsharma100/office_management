@@ -4,6 +4,7 @@ build/
 .env
 .env.local
 .env.*.local
+backups/
 *.log
 npm-debug.log*
 server/data/

@@ -204,15 +204,22 @@ npm run docker:up      # build and run the whole thing in Docker
 
 ---
 
-## Before deploying
+## Deploying
 
-1. Set a real `JWT_SECRET` — a long random string.
-2. Change `SUPER_ADMIN_PASSWORD` and `BACKUP_ADMIN_PASSWORD`.
-3. Set `SEED_DEMO_DATA=false` so no demo staff are created.
-4. Set `CORS_ORIGIN` to your real domain.
-5. Put it behind HTTPS — the auth cookie sets `secure` when `NODE_ENV=production`.
-6. Back up the database volume. Section 15 says nothing is ever thrown away, and
-   that only holds if the volume survives.
+**[DEPLOY.md](DEPLOY.md) is the step-by-step guide** — a Hostinger VPS, copy-paste
+commands, about 30 minutes. `docker compose up -d --build` brings up the app and
+a Caddy reverse proxy that gets HTTPS certificates on its own.
+
+The short version of what a deployment needs:
+
+1. A real `JWT_SECRET` — a long random string. Compose refuses to start without one.
+2. Real `SUPER_ADMIN_PASSWORD` and `BACKUP_ADMIN_PASSWORD`; the defaults are public.
+3. `SEED_DEMO_DATA=false` so no demo staff are created.
+4. `CORS_ORIGIN` set to your real domain.
+5. HTTPS — the auth cookie sets `secure` when `NODE_ENV=production`, so login
+   silently fails over plain HTTP. Caddy handles this.
+6. Backups of the database volume (`scripts/backup.sh`). Section 15 says nothing
+   is ever thrown away, and that only holds if the volume survives.
 
 ---
 

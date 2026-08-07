@@ -13,3 +13,8 @@ server/data
 .vscode
 .idea
 README.md
+DEPLOY.md
+Caddyfile
+docker-compose.yml
+scripts
+backups
