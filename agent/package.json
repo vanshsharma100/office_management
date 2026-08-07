@@ -1,0 +1,20 @@
+{
+  "name": "@ftech/sync-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reads biometric punches from SQL Server Express on the office PC and pushes them to the Ftech Office web app.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "discover": "node src/index.js --discover",
+    "test-connection": "node src/index.js --test",
+    "once": "node src/index.js --once"
+  },
+  "dependencies": {
+    "mssql": "^11.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

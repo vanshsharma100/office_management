@@ -1,0 +1,41 @@
+{
+  "//": "Copy to config.json and fill in. config.json is gitignored and must never be committed — it holds the SQL password and the agent key.",
+
+  "apiUrl": "https://office.yourdomain.com",
+  "agentKey": "ftk_paste-the-key-shown-once-when-you-registered-this-pc",
+
+  "sql": {
+    "//": "Use EITHER port (recommended, needs a static port) OR instanceName (needs SQL Server Browser running).",
+    "server": "localhost",
+    "port": 1433,
+    "instanceName": null,
+    "database": "eTimeTrackLite1",
+    "user": "ftech_sync",
+    "password": "",
+    "encrypt": true,
+    "trustServerCertificate": true
+  },
+
+  "query": {
+    "//": "Which table holds the punches, and what its columns are called. Run `npm run discover` to list them.",
+    "table": "DeviceLogs",
+    "columns": {
+      "id": "DeviceLogId",
+      "uid": "UserId",
+      "punchAt": "LogDate",
+      "direction": null,
+      "deviceId": "DeviceId"
+    },
+    "//cursorMode": "'id' walks an always-increasing key and never misses a row. 'time' is the fallback when the table has no such column.",
+    "cursorMode": "id"
+  },
+
+  "sync": {
+    "//": "How often to look for new punches, in seconds.",
+    "intervalSeconds": 900,
+    "//backfillDays": "How many past days to confirm on startup, so days missed while this PC was off get closed.",
+    "backfillDays": 14,
+    "batchSize": 500,
+    "timezone": "Asia/Kolkata"
+  }
+}

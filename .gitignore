@@ -5,6 +5,10 @@ build/
 .env.local
 .env.*.local
 backups/
+
+# The sync agent's SQL password and API key live here, and its cursor.
+agent/config.json
+agent/state.json
 *.log
 npm-debug.log*
 server/data/
