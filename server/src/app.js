@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
-import prisma from './lib/prisma.js';
+import prisma, { dbDriver } from './lib/prisma.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import departmentRoutes from './routes/departments.js';
@@ -109,7 +109,7 @@ export function createApp() {
           setTimeout(() => reject(new Error('database did not respond within 5s')), 5000)
         ),
       ]);
-      res.json({ ...base, db: 'up' });
+      res.json({ ...base, db: 'up', driver: dbDriver });
     } catch (err) {
       // "Did not respond" is true and useless: a blocked outbound port, a wrong
       // password and a paused database look identical from out here, and they
@@ -121,6 +121,7 @@ export function createApp() {
         ...base,
         ok: false,
         db: 'down',
+        driver: dbDriver,
         dbError: String(err.message).slice(0, 300),
         target: target ? `${target.host}:${target.port}` : null,
         reachable: reach,

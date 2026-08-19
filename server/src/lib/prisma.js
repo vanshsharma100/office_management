@@ -19,6 +19,15 @@ import { neonConfig } from '@neondatabase/serverless';
 
 const globalForPrisma = globalThis;
 
+/**
+ * Which driver ended up being used, for /api/health to report.
+ *
+ * Worth surfacing: "the database does not answer" means opposite things
+ * depending on this, and a deploy that quietly shipped the wrong code looks
+ * identical from outside to one that shipped the right code and still fails.
+ */
+export let dbDriver = 'not-initialised';
+
 /** Neon hosts are the ones reachable over HTTPS instead of a Postgres socket. */
 function isNeon(connectionString) {
   try {
@@ -55,9 +64,11 @@ function createAdapter(connectionString) {
       neonConfig.webSocketConstructor = WebSocket;
     }
 
+    dbDriver = 'neon-http';
     return new PrismaNeon({ connectionString });
   }
 
+  dbDriver = 'pg';
   return new PrismaPg({
     connectionString,
     // Shared hosting gives a process very little room, and a pooler counts
