@@ -96,9 +96,14 @@ Open it:
 nano .env
 ```
 
-Fill in all six blanks: `DOMAIN`, `JWT_SECRET` (paste what `openssl` printed),
-`CORS_ORIGIN`, `SUPER_ADMIN_PASSWORD`, `BACKUP_ADMIN_PASSWORD`, and leave
-`SEED_DEMO_DATA=false`.
+Fill in all six blanks: `DOMAIN`, `POSTGRES_PASSWORD` (any long random string —
+only the app container ever uses it), `JWT_SECRET` (paste what `openssl`
+printed), `CORS_ORIGIN`, `SUPER_ADMIN_PASSWORD`, `BACKUP_ADMIN_PASSWORD`, and
+leave `SEED_DEMO_DATA=false`.
+
+> Leave `POSTGRES_PASSWORD` empty and Step 6 stops immediately with
+> `set POSTGRES_PASSWORD in .env` — the database refuses to be created without
+> one, on purpose.
 
 Save with `Ctrl+O`, `Enter`, then exit with `Ctrl+X`.
 
@@ -161,8 +166,20 @@ machine now and then — a backup that only exists on the same server is not a
 backup. From your PC:
 
 ```bash
-scp root@YOUR_VPS_IP:/root/office_management/backups/*.db ./
+scp root@YOUR_VPS_IP:/root/office_management/backups/*.sql.gz ./
 ```
+
+### Restoring one
+
+Rehearse this once now, on a day nothing is wrong, so you are not reading it
+for the first time on the day something is. On the VPS:
+
+```bash
+gunzip -c backups/ftech-20260819-030000.sql.gz | docker compose exec -T db psql -U ftech ftech
+```
+
+The dump is taken with `--clean`, so it drops and recreates each table as it
+goes — whatever is in the database now is replaced by the backup.
 
 ## Everyday commands
 

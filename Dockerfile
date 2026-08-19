@@ -25,6 +25,11 @@ COPY web/package.json ./web/
 # Must land before install: the root postinstall runs this, and npm resolves it
 # relative to /app. Without it the install fails on a missing module.
 COPY scripts ./scripts
+# Same reason, one step further on: that postinstall ends in `prisma generate
+# --schema server/prisma/schema.prisma`, so the schema has to be here too. The
+# rest of server/ can wait — keeping it out until after install is what lets a
+# code change reuse the cached dependency layer.
+COPY server/prisma ./server/prisma
 RUN npm install --omit=dev --workspace server --include-workspace-root
 
 COPY server ./server
