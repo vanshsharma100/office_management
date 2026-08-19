@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
 import fs from 'node:fs';
+import net from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 import prisma from './lib/prisma.js';
@@ -31,6 +32,36 @@ import healthRoutes from './routes/health.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Host and port the database lives at — never the credentials in front of them. */
+function dbTarget() {
+  try {
+    const url = new URL(process.env.DATABASE_URL);
+    return { host: url.hostname, port: Number(url.port) || 5432 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Can this machine open a socket there at all?
+ *
+ * A refusal is a server saying no, and arrives at once. Silence until the
+ * deadline is a firewall swallowing the packets — the usual shape of a host
+ * that only lets port 80 and 443 out.
+ */
+function probeTcp({ host, port }, ms = 4000) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const finish = (answer) => {
+      socket.destroy();
+      resolve(answer);
+    };
+    socket.setTimeout(ms, () => finish(`no answer in ${ms}ms — port ${port} is probably blocked outbound`));
+    socket.once('connect', () => finish('ok — the port is open, so the failure is past the network'));
+    socket.once('error', (e) => finish(e.code || e.message));
+  });
+}
 
 export function createApp() {
   const app = express();
@@ -80,7 +111,20 @@ export function createApp() {
       ]);
       res.json({ ...base, db: 'up' });
     } catch (err) {
-      res.status(503).json({ ...base, ok: false, db: 'down', dbError: String(err.message).slice(0, 300) });
+      // "Did not respond" is true and useless: a blocked outbound port, a wrong
+      // password and a paused database look identical from out here, and they
+      // have nothing in common as fixes. Opening a bare socket to the same host
+      // and port separates the one case from the other two.
+      const target = dbTarget();
+      const reach = target ? await probeTcp(target) : 'DATABASE_URL is missing or unparseable';
+      res.status(503).json({
+        ...base,
+        ok: false,
+        db: 'down',
+        dbError: String(err.message).slice(0, 300),
+        target: target ? `${target.host}:${target.port}` : null,
+        reachable: reach,
+      });
     }
   });
 
