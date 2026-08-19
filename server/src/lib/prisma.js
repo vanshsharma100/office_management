@@ -1,7 +1,29 @@
+import { createRequire } from 'node:module';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaNeon } from '@prisma/adapter-neon';
-import { neonConfig } from '@neondatabase/serverless';
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Neon's driver is loaded, not imported.
+ *
+ * A top-level import that throws takes the whole process down before a single
+ * line reaches the log, and a host that answers with its own 503 page tells
+ * you nothing about why. That is not a hypothetical: @neondatabase/serverless
+ * 1.x declares engines >=19, and on an older Node the app simply stopped
+ * existing. Loading it in a try means the worst case is a database that does
+ * not work — which /api/health can then say out loud — rather than a site that
+ * is gone.
+ */
+let PrismaNeon = null;
+let neonConfig = null;
+let neonLoadError = null;
+try {
+  ({ PrismaNeon } = require('@prisma/adapter-neon'));
+  ({ neonConfig } = require('@neondatabase/serverless'));
+} catch (err) {
+  neonLoadError = String(err.message).slice(0, 200);
+}
 
 /**
  * Prisma, talking to Postgres through a JavaScript driver rather than Prisma's
@@ -52,7 +74,11 @@ function isNeon(connectionString) {
  * request per query.
  */
 function createAdapter(connectionString) {
-  if (isNeon(connectionString)) {
+  if (isNeon(connectionString) && !PrismaNeon) {
+    // Say so rather than quietly using pg against a host that will not answer
+    // it — the symptom would be an unreachable database with no stated cause.
+    dbDriver = `pg (neon driver failed to load: ${neonLoadError})`;
+  } else if (isNeon(connectionString)) {
     // Ordinary queries as HTTPS requests rather than over a socket.
     neonConfig.poolQueryViaFetch = true;
 
@@ -68,7 +94,7 @@ function createAdapter(connectionString) {
     return new PrismaNeon({ connectionString });
   }
 
-  dbDriver = 'pg';
+  if (dbDriver === 'not-initialised') dbDriver = 'pg';
   return new PrismaPg({
     connectionString,
     // Shared hosting gives a process very little room, and a pooler counts
