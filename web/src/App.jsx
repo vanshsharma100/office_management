@@ -20,6 +20,9 @@ import Salary from './pages/Salary';
 import HistoryLog from './pages/HistoryLog';
 import SettingsPage from './pages/Settings';
 import AttendanceSync from './pages/AttendanceSync';
+import WeeklyReport from './pages/WeeklyReport';
+import ResetPassword from './pages/ResetPassword';
+import MyHealth from './pages/MyHealth';
 import NotFound from './pages/NotFound';
 
 function Protected({ children }) {
@@ -49,6 +52,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      {/* Public: somebody using this cannot sign in by definition. */}
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       <Route
         element={
@@ -59,6 +64,8 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="work" element={<MyWork />} />
+        <Route path="weekly-report" element={<WeeklyReport />} />
+        <Route path="my-health" element={<MyHealth />} />
         <Route path="approvals" element={<Approvals />} />
         <Route path="employees" element={<Employees />} />
         <Route path="employees/:id" element={<EmployeeDetail />} />

@@ -4,6 +4,17 @@ export const ROLES = {
   EMPLOYEE: 'EMPLOYEE',
 };
 
+/**
+ * Roles whose attendance is not kept at all.
+ *
+ * The owner runs the office rather than punches into it. Listing them on the
+ * daily board was the visible half of the problem; the real one was that
+ * closing a day wrote them an ABSENT row like anyone else, and that row is
+ * what salary reads. Both the board and the derivation read this list, so a
+ * name can never appear in one and be judged by the other.
+ */
+export const ATTENDANCE_EXEMPT_ROLES = [ROLES.SUPER_ADMIN];
+
 export const DEPT_STATUS = { ACTIVE: 'ACTIVE', COMING_SOON: 'COMING_SOON' };
 
 export const SUBMISSION_STATUS = {
@@ -48,8 +59,51 @@ export const LEAVE_TYPES = [
   'OTHER',
 ];
 
-/** Leave types that still pay (Section 13.4 / assumption noted in README). */
-export const PAID_LEAVE_TYPES = ['SICK', 'PAID', 'WFH', 'CASUAL'];
+/**
+ * Section 13.4 — the house rule for what a leave decision costs.
+ *
+ * The approver tags an approved leave "Paid" or "Unpaid", and in this office
+ * those words describe who carries the day:
+ *
+ *   Paid   → the company pays for the day off, so the day comes out of the
+ *            employee's salary at the day rate.
+ *   Unpaid → the day is not charged to anyone. Salary is untouched.
+ *
+ * That is the reverse of the usual payroll convention, so every label the
+ * approver sees spells out the money rather than relying on the word alone.
+ * Stored as LeaveRequest.isPaid; `true` is the only value that deducts.
+ *
+ * The types below merely pre-select "Paid" in the approve dialog. The approver
+ * can always switch it, and the decision is what counts — never the type.
+ */
+export const DEDUCTING_LEAVE_TYPES = ['URGENT', 'EMERGENCY', 'PAID'];
+
+/**
+ * The attendance status an approved leave puts on a day.
+ *
+ * Two places write it — the approval itself (routes/leave.js) and the nightly
+ * rebuild from the punch machine (services/attendanceDerive.js). They must
+ * agree, or the rebuild flattens an approved WFH or half day into a plain
+ * LEAVE and the day silently changes what it pays.
+ */
+export function attendanceStatusForLeave(leaveType) {
+  if (leaveType === 'WFH') return ATTENDANCE_STATUS.WFH;
+  if (leaveType === 'HALF_DAY') return ATTENDANCE_STATUS.HALF_DAY;
+  return ATTENDANCE_STATUS.LEAVE;
+}
+
+/**
+ * Statuses that mean the person did not work that day. Punch-derived fields —
+ * check in / out, hours, lateness — are meaningless on these and must be
+ * cleared, or an admin marking someone absent still pays them for the hours
+ * the machine recorded and fines them for arriving late to a day off.
+ */
+export const NON_WORKING_STATUS = [
+  ATTENDANCE_STATUS.ABSENT,
+  ATTENDANCE_STATUS.LEAVE,
+  ATTENDANCE_STATUS.HOLIDAY,
+  ATTENDANCE_STATUS.WEEKLY_OFF,
+];
 
 export const QUESTION_TYPES = { NUMBER: 'NUMBER', CHECK_FAIL: 'CHECK_FAIL' };
 
@@ -90,6 +144,7 @@ export const PERMISSIONS = [
 
   { key: 'departments.view', group: 'Reporting', label: 'View department totals & targets' },
   { key: 'audit.view', group: 'Reporting', label: 'View history log' },
+  { key: 'health.manage', group: 'Reporting', label: 'Fill employee health scorecards' },
 ];
 
 export const PERMISSION_KEYS = PERMISSIONS.map((p) => p.key);
@@ -157,4 +212,15 @@ export const AUDIT = {
   MONTH_UNLOCKED: 'MONTH_UNLOCKED',
   PAYROLL_EXPORTED: 'PAYROLL_EXPORTED',
   TARGET_UPDATED: 'TARGET_UPDATED',
+  BRANDING_UPDATED: 'BRANDING_UPDATED',
+  WEEKLY_REPORT_SUBMITTED: 'WEEKLY_REPORT_SUBMITTED',
+  WEEKLY_REPORT_UPDATED: 'WEEKLY_REPORT_UPDATED',
+  WEEKLY_REPORT_CONFIGURED: 'WEEKLY_REPORT_CONFIGURED',
+  PROFILE_UPDATED: 'PROFILE_UPDATED',
+  REPORT_EXPORTED: 'REPORT_EXPORTED',
+  DATA_RESET: 'DATA_RESET',
+  PASSWORD_RESET_REQUESTED: 'PASSWORD_RESET_REQUESTED',
+  PASSWORD_RESET_COMPLETED: 'PASSWORD_RESET_COMPLETED',
+  RECOVERY_EMAIL_SET: 'RECOVERY_EMAIL_SET',
+  HEALTH_UPDATED: 'HEALTH_UPDATED',
 };

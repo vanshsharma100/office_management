@@ -23,6 +23,11 @@ import salaryRoutes from './routes/salary.js';
 import dashboardRoutes from './routes/dashboard.js';
 import auditRoutes from './routes/audit.js';
 import syncRoutes from './routes/sync.js';
+import brandingRoutes from './routes/branding.js';
+import weeklyRoutes from './routes/weekly.js';
+import reportRoutes from './routes/reports.js';
+import adminRoutes from './routes/admin.js';
+import healthRoutes from './routes/health.js';
 import { errorHandler, notFound } from './middleware/error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +52,13 @@ export function createApp() {
   app.use(
     '/api/auth/login',
     rateLimit({ windowMs: 10 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false })
+  );
+
+  // Tighter still on the reset endpoints: they send email and hand out keys to
+  // an account, so they must not be usable to flood an inbox or grind tokens.
+  app.use(
+    ['/api/auth/forgot', '/api/auth/reset'],
+    rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false })
   );
 
   /**
@@ -85,6 +97,11 @@ export function createApp() {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/audit', auditRoutes);
   app.use('/api/sync', syncRoutes);
+  app.use('/api/branding', brandingRoutes);
+  app.use('/api/weekly', weeklyRoutes);
+  app.use('/api/reports', reportRoutes);
+  app.use('/api/admin', adminRoutes);
+  app.use('/api/health-score', healthRoutes);
 
   // In production the API also serves the built frontend, so one container
   // and one port is all a deployment needs.

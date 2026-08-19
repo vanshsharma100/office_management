@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
-import { AUDIT, LEAVE_TYPES, ATTENDANCE_STATUS, PAID_LEAVE_TYPES } from '../lib/constants.js';
+import {
+  AUDIT,
+  LEAVE_TYPES,
+  DEDUCTING_LEAVE_TYPES,
+  attendanceStatusForLeave,
+} from '../lib/constants.js';
 import { logAudit } from '../lib/audit.js';
 import {
   requireAuth,
@@ -77,6 +82,7 @@ router.post(
         decision: z.enum(['APPROVE', 'REJECT']),
         note: z.string().nullish(),
         // The approver decides whether this leave costs the employee money.
+        // true = "Paid", which deducts a day per day (see DEDUCTING_LEAVE_TYPES).
         // Defaults to the leave type's convention, but the decision is theirs.
         isPaid: z.boolean().optional(),
       })
@@ -93,7 +99,8 @@ router.post(
     if (request.status !== 'PENDING') throw new HttpError(400, 'This request was already decided');
 
     const approved = decision === 'APPROVE';
-    const paid = isPaid ?? PAID_LEAVE_TYPES.includes(request.type);
+    const paid = isPaid ?? DEDUCTING_LEAVE_TYPES.includes(request.type);
+    const moneyNote = paid ? 'paid — a day of salary is deducted' : 'unpaid — no deduction';
     const updated = await prisma.leaveRequest.update({
       where: { id: request.id },
       data: {
@@ -108,12 +115,7 @@ router.post(
     // Approved leave writes straight into attendance so salary and work rules
     // (Sections 11.1 / 11.2) line up without anyone re-keying it.
     if (approved) {
-      const status =
-        request.type === 'WFH'
-          ? ATTENDANCE_STATUS.WFH
-          : request.type === 'HALF_DAY'
-            ? ATTENDANCE_STATUS.HALF_DAY
-            : ATTENDANCE_STATUS.LEAVE;
+      const status = attendanceStatusForLeave(request.type);
 
       for (let date = request.fromDate; date <= request.toDate; date = addDays(date, 1)) {
         await prisma.attendance.upsert({
@@ -122,13 +124,13 @@ router.post(
             userId: request.userId,
             date,
             status,
-            note: `${request.type} leave approved (${paid ? 'paid' : 'unpaid'})`,
+            note: `${request.type} leave approved (${moneyNote})`,
             markedById: req.user.id,
             source: 'SYSTEM',
           },
           update: {
             status,
-            note: `${request.type} leave approved (${paid ? 'paid' : 'unpaid'})`,
+            note: `${request.type} leave approved (${moneyNote})`,
             markedById: req.user.id,
             source: 'SYSTEM',
           },
@@ -142,8 +144,9 @@ router.post(
       'LeaveRequest',
       request.id,
       `${approved ? 'Approved' : 'Rejected'} ${request.user.name}'s ${request.type} leave (${request.fromDate} → ${request.toDate})` +
+        (approved ? `, ${moneyNote}` : '') +
         (note ? ` — ${note}` : ''),
-      { decision, note }
+      { decision, note, isPaid: approved ? paid : null }
     );
 
     res.json({ request: updated });

@@ -2,39 +2,36 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarCheck,
+  CalendarDays,
   CalendarPlus,
   CheckCheck,
-  ChevronLeft,
-  ChevronRight,
-  LogIn,
-  LogOut,
   PartyPopper,
   Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import { addDays, currentMonth, prettyDate, prettyMonth, prettyTime, shiftMonth, todayISO } from '../lib/format';
+import { prettyDate, prettyTime, todayISO } from '../lib/format';
 import { Avatar, Badge, Card, Empty, Field, Modal, SectionTitle, Spinner, StatusBadge, Tabs } from '../components/ui';
 import { AttendanceDonut } from '../components/charts';
 
 const STATUSES = ['PRESENT', 'ABSENT', 'LEAVE', 'HALF_DAY', 'WFH', 'HOLIDAY'];
 
 export default function Attendance() {
-  const { can, isEmployee } = useAuth();
-  const [tab, setTab] = useState(can('attendance.view') ? 'board' : 'mine');
+  const { can } = useAuth();
+  const [tab, setTab] = useState(can('attendance.view') ? 'board' : 'holidays');
 
+  // Attendance comes from the biometric machine now, so there is no self
+  // check-in. Everyone can still see the office's holidays here.
   const tabs = [
     ...(can('attendance.view') ? [{ value: 'board', label: 'Daily board' }] : []),
-    { value: 'mine', label: 'My attendance' },
-    ...(can('holidays.manage') || !isEmployee ? [{ value: 'holidays', label: 'Holidays' }] : []),
+    { value: 'holidays', label: 'Holidays' },
   ];
 
   return (
     <div className="space-y-5">
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      {tabs.length > 1 && <Tabs tabs={tabs} active={tab} onChange={setTab} />}
       {tab === 'board' && <DailyBoard />}
-      {tab === 'mine' && <MyAttendance />}
       {tab === 'holidays' && <Holidays />}
     </div>
   );
@@ -94,14 +91,22 @@ function DailyBoard() {
 
   return (
     <div className="space-y-5">
-      <Card className="flex items-center justify-between gap-3 p-3">
-        <button
-          onClick={() => setDate((d) => addDays(d, -1))}
-          className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-500 dark:border-white/10"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <div className="text-center">
+      {/* Pick any past day straight off the calendar. Stepping back one arrow
+          at a time meant nine clicks to reach last week. */}
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2">
+            <CalendarDays size={18} className="shrink-0 text-ink-500" />
+            <span className="sr-only">Show attendance for</span>
+            <input
+              type="date"
+              className="input w-auto"
+              value={date}
+              // Tomorrow has not happened, so it cannot be viewed.
+              max={todayISO()}
+              onChange={(e) => e.target.value && setDate(e.target.value)}
+            />
+          </label>
           <p className="font-display font-semibold">{prettyDate(date)}</p>
           {data.holiday && (
             <Badge tone="brand">
@@ -110,11 +115,11 @@ function DailyBoard() {
           )}
         </div>
         <button
-          onClick={() => setDate((d) => addDays(d, 1))}
-          disabled={date >= todayISO()}
-          className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-500 disabled:opacity-30 dark:border-white/10"
+          onClick={() => setDate(todayISO())}
+          disabled={date === todayISO()}
+          className="btn-ghost btn-sm disabled:opacity-30"
         >
-          <ChevronRight size={18} />
+          Today
         </button>
       </Card>
 
@@ -205,111 +210,6 @@ function DailyBoard() {
           ))}
         </div>
       </Modal>
-    </div>
-  );
-}
-
-/** Section 8.2 — an employee's own attendance history. */
-function MyAttendance() {
-  const { toast } = useUI();
-  const [month, setMonth] = useState(currentMonth());
-  const [data, setData] = useState(null);
-  const [today, setToday] = useState(null);
-
-  const load = useCallback(() => {
-    api.get('/attendance/month', { params: { month } }).then((r) => setData(r.data)).catch((e) => toast(e.message, 'error'));
-    api.get('/attendance/today').then((r) => setToday(r.data)).catch(() => {});
-  }, [month, toast]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const punch = async (kind) => {
-    try {
-      await api.post(`/attendance/${kind}`);
-      toast(kind === 'check-in' ? 'Checked in.' : 'Checked out.');
-      load();
-    } catch (e) {
-      toast(e.message, 'error');
-    }
-  };
-
-  if (!data) return <Spinner label="Loading your attendance" />;
-
-  return (
-    <div className="space-y-5">
-      <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div>
-          <p className="font-display font-semibold">Today · {prettyDate(todayISO())}</p>
-          <p className="text-sm text-ink-500 dark:text-ink-400">
-            {today?.record
-              ? `${today.record.status.toLowerCase()} · in ${prettyTime(today.record.checkIn)}${
-                  today.record.checkOut ? ` · out ${prettyTime(today.record.checkOut)}` : ''
-                }`
-              : 'Not marked yet'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {!today?.record?.checkIn ? (
-            <button onClick={() => punch('check-in')} className="btn-primary btn-sm">
-              <LogIn size={15} /> Check in
-            </button>
-          ) : !today?.record?.checkOut ? (
-            <button onClick={() => punch('check-out')} className="btn-ghost btn-sm">
-              <LogOut size={15} /> Check out
-            </button>
-          ) : (
-            <Badge tone="green">Day complete</Badge>
-          )}
-        </div>
-      </Card>
-
-      <Card className="flex items-center justify-between gap-3 p-3">
-        <button
-          onClick={() => setMonth((m) => shiftMonth(m, -1))}
-          className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-500 dark:border-white/10"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <p className="font-display font-semibold">{prettyMonth(month)}</p>
-        <button
-          onClick={() => setMonth((m) => shiftMonth(m, 1))}
-          disabled={month >= currentMonth()}
-          className="grid h-10 w-10 place-items-center rounded-xl border border-ink-200 text-ink-500 disabled:opacity-30 dark:border-white/10"
-        >
-          <ChevronRight size={18} />
-        </button>
-      </Card>
-
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card className="p-5">
-          <SectionTitle title="This month" icon={CalendarCheck} />
-          <AttendanceDonut summary={data.summary} />
-        </Card>
-
-        <Card className="p-5 lg:col-span-2">
-          <SectionTitle title="Day by day" subtitle={prettyMonth(month)} icon={CalendarCheck} />
-          {data.records.length === 0 ? (
-            <Empty title="Nothing marked this month" icon={CalendarCheck} />
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {data.records.map((r) => (
-                <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl bg-ink-100/60 p-3 dark:bg-white/5">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold">{prettyDate(r.date)}</p>
-                    <p className="truncate text-xs text-ink-500 dark:text-ink-400">
-                      {r.hours > 0 ? `${r.hours} h` : ''}
-                      {r.markedBy ? ` · marked by ${r.markedBy.name}` : ''}
-                    </p>
-                  </div>
-                  <StatusBadge status={r.status} />
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
     </div>
   );
 }

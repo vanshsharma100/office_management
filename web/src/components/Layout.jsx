@@ -8,6 +8,8 @@ import {
   ClipboardList,
   CalendarCheck,
   CalendarOff,
+  CalendarRange,
+  Activity,
   ListTodo,
   Megaphone,
   MessageCircleQuestion,
@@ -27,6 +29,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { Avatar } from './ui';
+import { LogoMark } from './Logo';
 
 /** One nav definition drives the sidebar, the mobile bar and the more-sheet. */
 export function useNavigation() {
@@ -36,6 +39,8 @@ export function useNavigation() {
     const items = [
       { to: '/', label: 'Dashboard', hi: 'डैशबोर्ड', icon: LayoutDashboard, show: true, end: true },
       { to: '/work', label: 'My Work', hi: 'मेरा काम', icon: ClipboardList, show: isEmployee },
+      { to: '/weekly-report', label: 'Weekly Report', hi: 'साप्ताहिक रिपोर्ट', icon: CalendarRange, show: isEmployee },
+      { to: '/my-health', label: 'My Health', hi: 'मेरा स्वास्थ्य', icon: Activity, show: isEmployee },
       { to: '/approvals', label: 'Approvals', hi: 'अनुमोदन', icon: ShieldCheck, show: can('work.approve') },
       { to: '/employees', label: 'Employees', hi: 'कर्मचारी', icon: Users, show: can('employees.view') },
       { to: '/departments', label: 'Departments', hi: 'विभाग', icon: Building2, show: can('departments.view') || isSuperAdmin },
@@ -251,9 +256,7 @@ function NavItem({ item, label }) {
 function Brand({ onClose }) {
   return (
     <div className="flex items-center gap-3 px-5 py-5">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-black font-display text-lg font-bold text-white shadow-lift dark:bg-white dark:text-black">
-        F
-      </span>
+      <LogoMark size={40} />
       <div className="min-w-0 flex-1">
         <p className="truncate font-display text-[15px] font-bold leading-tight tracking-tightest">Ftech Computers</p>
         <p className="truncate text-[11px] font-medium text-ink-500 dark:text-ink-400">Office Management</p>

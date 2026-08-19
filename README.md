@@ -129,14 +129,42 @@ that is easy to change:
 | 5 | Are Managers normal employees? | Normal employees with `isManager`, whose salary only the Super Admin may change. |
 | 6 | Company name | Ftech Computers, used throughout. |
 
-To change any of these, edit `PAID_ATTENDANCE` / `PAID_LEAVE_TYPES` /
+To change any of these, edit `PAID_ATTENDANCE` / `DEDUCTING_LEAVE_TYPES` /
 `WFH_CUTOFF_HOUR` in [`server/src/lib/constants.js`](server/src/lib/constants.js).
 
+**Leave: paid or unpaid** (§13.4): the approver tags every approved leave, and
+in this office those words describe who carries the day. **Paid** means the
+company paid for the day off, so it comes out of the employee's salary at the
+day rate. **Unpaid** costs nothing and leaves salary untouched. That is the
+reverse of the usual payroll convention, so every label in the approve dialog
+states the money instead of relying on the word. The leave *type* only decides
+which option is pre-selected — the approver's choice is what pays.
+
 **Salary formula** (§12): a monthly salary is divided across the calendar days
-of the month, and every paid day — present, approved WFH, declared holiday, paid
-leave — earns a full share; half days earn half. So a declared holiday never
-reduces anyone's salary. Hourly staff are paid on hours actually recorded.
-Incentives and bonuses add, deductions subtract.
+of the month, and every paid day — present, approved WFH, declared holiday,
+leave approved as unpaid — earns a full share; half days earn half. So a
+declared holiday never reduces anyone's salary. Hourly staff are paid on hours
+actually recorded. Incentives and bonuses add, deductions subtract.
+
+**Company logo** (Settings → *Company logo*, Super Admin only): upload a PNG,
+JPG or WebP and it appears on the sign-in screen, in the sidebar and in the
+browser tab for everyone. The browser shrinks it and it is stored as a data URL
+in the `Setting` table — no file volume to lose on a redeploy. With no logo
+uploaded the plain monogram is used.
+
+**Office timing** is set at three levels, and the most specific one wins,
+field by field: an **employee's** own timing beats their **department's**,
+which beats the **office-wide** policy. Anything left blank falls through to
+the next level, so a department can move its start time without repeating the
+grace period. Set them in Attendance sync (office), Departments → edit
+(department) and an employee's page → Edit (one person). Changing a rule never
+rewrites days already decided — run *Recalculate* for that.
+
+**Late & half day fines** (Attendance sync → *Shift & attendance rules*): the
+office may forgive a number of late arrivals each month and charge a flat
+amount for every late day after that, plus a flat amount per half day. Both
+amounts start blank, meaning no one is ever fined. A day counted as a half day
+is charged the half day fine only, never the late fine as well.
 
 ---
 

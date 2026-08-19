@@ -9,8 +9,6 @@ import {
   Clock,
   Gauge,
   ListTodo,
-  LogIn,
-  LogOut,
   Megaphone,
   PartyPopper,
   ShieldCheck,
@@ -22,8 +20,9 @@ import {
 import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
-import { money, num, prettyDate, prettyTime, timeAgo } from '../lib/format';
+import { currentMonth, money, num, prettyDate, prettyTime, timeAgo } from '../lib/format';
 import { AttendanceDonut, WorkTrend } from '../components/charts';
+import Leaderboard from '../components/Leaderboard';
 import { Badge, Card, Empty, Progress, SectionTitle, SkeletonCard, StatusBadge } from '../components/ui';
 
 export default function Dashboard() {
@@ -61,7 +60,7 @@ export default function Dashboard() {
   return data.panel === 'ADMIN' ? (
     <AdminDashboard data={data} user={user} />
   ) : (
-    <EmployeeDashboard data={data} user={user} reload={load} />
+    <EmployeeDashboard data={data} user={user} />
   );
 }
 
@@ -238,6 +237,8 @@ function AdminDashboard({ data, user }) {
           )}
         </Card>
       </div>
+
+      <Leaderboard month={currentMonth()} limit={10} />
     </div>
   );
 }
@@ -323,24 +324,8 @@ function DepartmentBlock({ block, onClick }) {
 
 /* ═══════════════════════════════════════════════════════════ Employee ══ */
 
-function EmployeeDashboard({ data, user, reload }) {
-  const { toast } = useUI();
-  const [busy, setBusy] = useState(false);
+function EmployeeDashboard({ data, user }) {
   const att = data.attendanceToday;
-
-  const mark = async (kind) => {
-    setBusy(true);
-    try {
-      await api.post(`/attendance/${kind}`);
-      toast(kind === 'check-in' ? 'Checked in. Have a good shift.' : 'Checked out. See you tomorrow.');
-      reload();
-    } catch (e) {
-      toast(e.message, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const monthDone = data.attendanceSummary.PRESENT ?? 0;
 
   return (
@@ -349,26 +334,12 @@ function EmployeeDashboard({ data, user, reload }) {
         title={`${greeting()}, ${user.name.split(' ')[0]}`}
         subtitle={`${prettyDate(data.today)}${data.holiday ? ` · ${data.holiday.name}` : ''} · ${user.employeeId}`}
         right={
-          <div className="flex flex-wrap gap-2">
-            {!att?.checkIn ? (
-              <button onClick={() => mark('check-in')} disabled={busy} className="btn-primary btn-sm">
-                <LogIn size={15} /> Check in
-              </button>
-            ) : !att?.checkOut ? (
-              <button onClick={() => mark('check-out')} disabled={busy} className="btn-ghost btn-sm">
-                <LogOut size={15} /> Check out
-              </button>
-            ) : (
-              <Badge tone="green">
-                <CheckCircle2 size={13} /> Day complete
-              </Badge>
-            )}
-            {!data.comingSoon && (
-              <Link to="/work" className="btn-primary btn-sm">
-                <ClipboardList size={15} /> Submit work
-              </Link>
-            )}
-          </div>
+          // Attendance comes from the biometric machine — no self check-in.
+          !data.comingSoon ? (
+            <Link to="/work" className="btn-primary btn-sm">
+              <ClipboardList size={15} /> Submit work
+            </Link>
+          ) : null
         }
       />
 
@@ -392,8 +363,8 @@ function EmployeeDashboard({ data, user, reload }) {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Stat
           label="Today"
-          value={att ? att.status.replace('_', ' ').toLowerCase() : 'not marked'}
-          hint={att?.checkIn ? `In at ${prettyTime(att.checkIn)}` : 'Check in when you arrive'}
+          value={att ? att.status.replace('_', ' ').toLowerCase() : 'not synced yet'}
+          hint={att?.checkIn ? `In at ${prettyTime(att.checkIn)}` : 'From the attendance machine'}
           icon={CalendarCheck}
           tone={att?.status === 'PRESENT' ? 'green' : 'amber'}
         />
@@ -523,6 +494,8 @@ function EmployeeDashboard({ data, user, reload }) {
           )}
         </Card>
       </div>
+
+      <Leaderboard month={currentMonth()} limit={10} />
     </div>
   );
 }

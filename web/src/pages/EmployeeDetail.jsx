@@ -4,9 +4,12 @@ import {
   ArrowLeft,
   CalendarCheck,
   CalendarOff,
+  CalendarRange,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
+  FileText,
   ListTodo,
   MessageCircleQuestion,
   Pencil,
@@ -20,6 +23,11 @@ import { useUI } from '../context/UIContext';
 import { currentMonth, money, num, prettyDate, prettyMonth, shiftMonth } from '../lib/format';
 import { Avatar, Badge, Card, Empty, Field, Modal, SectionTitle, Spinner, StatusBadge, Tabs } from '../components/ui';
 import { WorkTrend } from '../components/charts';
+import { QUESTIONS as WEEKLY_QUESTIONS, StatusBadge as WeekStatusBadge } from './WeeklyReport';
+import EditSubmission from '../components/EditSubmission';
+import HealthCard from '../components/HealthCard';
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /** Section 6.3 — one employee's own dashboard, month switchable, any date openable. */
 export default function EmployeeDetail() {
@@ -30,6 +38,7 @@ export default function EmployeeDetail() {
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('overview');
   const [editing, setEditing] = useState(false);
+  const [editingWork, setEditingWork] = useState(null);
   const [payFor, setPayFor] = useState(false);
 
   const load = useCallback(() => {
@@ -43,6 +52,48 @@ export default function EmployeeDetail() {
     setData(null);
     load();
   }, [load]);
+
+  /**
+   * The month as a printable document — weekly reports, daily work,
+   * attendance, leave, tasks and pay on the office's letterhead.
+   *
+   * Opened in a tab rather than saved as a file: it has to be fetched with the
+   * session's auth header, which a plain link cannot carry, and a tab gives
+   * the reader Print → Save as PDF without downloading anything first.
+   */
+  const openReport = async () => {
+    try {
+      const res = await api.get(`/reports/employee/${id}`, {
+        params: { month },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/html' }));
+      const tab = window.open(url, '_blank');
+      if (!tab) toast('Allow pop-ups for this site to open the report', 'error');
+      // Long enough for the new tab to have loaded it.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
+
+  /** The same month as rows, for anyone who wants to work on it in Excel. */
+  const downloadCsv = async () => {
+    try {
+      const res = await api.get(`/reports/employee/${id}`, {
+        params: { month, format: 'csv' },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${data.user.employeeId}-${month}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
 
   if (!data) return <Spinner label="Opening employee" />;
   const u = data.user;
@@ -74,6 +125,16 @@ export default function EmployeeDetail() {
             </div>
           </div>
           <div className="flex gap-2">
+            {can('work.view') && (
+              <>
+                <button onClick={openReport} className="btn-ghost btn-sm">
+                  <FileText size={15} /> {prettyMonth(month)} report
+                </button>
+                <button onClick={downloadCsv} className="btn-ghost btn-sm" title="Open in Excel">
+                  <Download size={15} /> Excel
+                </button>
+              </>
+            )}
             {can('salary.edit') && (
               <button onClick={() => setPayFor(true)} className="btn-ghost btn-sm">
                 <Wallet size={15} /> Add pay item
@@ -131,6 +192,8 @@ export default function EmployeeDetail() {
         tabs={[
           { value: 'overview', label: 'Overview' },
           { value: 'work', label: 'Work', count: data.submissions.length },
+          { value: 'weekly', label: 'Weekly report' },
+          { value: 'health', label: 'Health' },
           { value: 'attendance', label: 'Attendance' },
           { value: 'salary', label: 'Salary' },
           { value: 'other', label: 'Leave & tasks' },
@@ -166,6 +229,10 @@ export default function EmployeeDetail() {
         </div>
       )}
 
+      {tab === 'weekly' && <WeeklyReports userId={data.user.id} />}
+
+      {tab === 'health' && <HealthCard userId={data.user.id} month={month} />}
+
       {tab === 'work' && (
         <Card className="p-5">
           <SectionTitle title="Submissions" subtitle="Every day, with who approved it" icon={ClipboardList} />
@@ -185,13 +252,31 @@ export default function EmployeeDetail() {
                         </Badge>
                       )}
                     </div>
-                    <span className="text-sm font-bold tabular-nums">
-                      {s.entries.reduce((a, e) => a + e.value, 0)} units
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold tabular-nums">
+                        {s.entries.reduce((a, e) => a + e.value, 0)} units
+                      </span>
+                      {/* Approved or not — a wrong number stays wrong until
+                          somebody can fix it, and bouncing it back costs a day. */}
+                      {can('work.approve') && (
+                        <button
+                          onClick={() => setEditingWork({ ...s, user: data.user })}
+                          className="btn-ghost btn-sm"
+                          title="Correct this day"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   {s.reviewedBy && (
                     <p className="mt-1 text-xs text-ink-500">
                       {s.status === 'APPROVED' ? 'Approved' : 'Reviewed'} by {s.reviewedBy.name}
+                    </p>
+                  )}
+                  {s.note && (
+                    <p className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/[.07] px-3 py-2 text-xs">
+                      <span className="font-semibold">Problem reported:</span> {s.note}
                     </p>
                   )}
                   <ul className="mt-2 grid gap-1 sm:grid-cols-2">
@@ -337,8 +422,84 @@ export default function EmployeeDetail() {
       )}
 
       {editing && <EditUserModal user={u} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}
+      {editingWork && (
+        <EditSubmission
+          submission={editingWork}
+          onClose={() => setEditingWork(null)}
+          onSaved={() => {
+            setEditingWork(null);
+            load();
+          }}
+        />
+      )}
       {payFor && <PayItemModal user={u} month={month} onClose={() => setPayFor(false)} onSaved={() => { setPayFor(false); load(); }} />}
     </div>
+  );
+}
+
+/**
+ * What this employee actually reported each week, and the weeks they did not.
+ * A missing week is the point of the screen, so it reads as loudly as a filled
+ * one rather than being an absence you have to notice.
+ */
+function WeeklyReports({ userId }) {
+  const { toast } = useUI();
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(null);
+
+  useEffect(() => {
+    api
+      .get(`/weekly/user/${userId}`, { params: { weeks: 12 } })
+      .then((r) => setData(r.data))
+      .catch((e) => toast(e.message, 'error'));
+  }, [userId, toast]);
+
+  if (!data) return <Spinner label="Loading weekly reports" />;
+
+  return (
+    <Card className="p-5">
+      <SectionTitle
+        title="Weekly reports"
+        subtitle={
+          data.config.enabled
+            ? `Opens every ${DAY_NAMES[data.config.openDay]}, stays open until the week ends`
+            : 'The weekly report is switched off'
+        }
+        icon={CalendarRange}
+      />
+      <ul className="space-y-2">
+        {data.weeks.map((w) => (
+          <li key={w.weekStart} className="rounded-xl border border-ink-200/70 dark:border-white/10">
+            <button
+              onClick={() => setOpen(open === w.weekStart ? null : w.weekStart)}
+              disabled={!w.report}
+              className="flex w-full flex-wrap items-center gap-3 p-3 text-left disabled:cursor-default"
+            >
+              <span className="text-sm font-medium">
+                {prettyDate(w.weekStart)} — {prettyDate(w.weekEnd)}
+              </span>
+              <WeekStatusBadge status={w.status} className="ml-auto" />
+              {w.report && (
+                <span className="text-xs text-ink-500">{open === w.weekStart ? 'Hide' : 'Read'}</span>
+              )}
+            </button>
+
+            {open === w.weekStart && w.report && (
+              <dl className="space-y-3 border-t border-ink-200/70 p-4 dark:border-white/10">
+                {WEEKLY_QUESTIONS.map((q) => (
+                  <div key={q.key}>
+                    <dt className="text-xs font-bold uppercase tracking-wide text-ink-500">{q.label}</dt>
+                    <dd className="mt-0.5 whitespace-pre-wrap text-sm">
+                      {w.report[q.key] || <span className="text-ink-400">—</span>}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -374,6 +535,7 @@ function EditUserModal({ user, onClose, onSaved }) {
   const { can, isSuperAdmin } = useAuth();
   const { toast } = useUI();
   const [departments, setDepartments] = useState([]);
+  const [policy, setPolicy] = useState(null);
   const [form, setForm] = useState({
     name: user.name,
     phone: user.phone ?? '',
@@ -382,24 +544,48 @@ function EditUserModal({ user, onClose, onSaved }) {
     salaryType: user.salaryType ?? 'MONTHLY',
     salaryAmount: user.salaryAmount ?? 0,
     isManager: user.isManager,
+    shiftStart: user.shiftStart ?? '',
+    graceMinutes: user.graceMinutes ?? '',
+    halfDayAfter: user.halfDayAfter ?? '',
+    weeklyReportDay: user.weeklyReportDay ?? '',
+    dailyTarget: user.dailyTarget ?? '',
+    autopilot: user.autopilot === true ? 'ON' : user.autopilot === false ? 'OFF' : '',
   });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.get('/departments').then((r) => setDepartments(r.data.departments)).catch(() => {});
+    api.get('/attendance/policy').then((r) => setPolicy(r.data.policy)).catch(() => {});
   }, []);
 
   const department = departments.find((d) => d.id === form.departmentId);
 
+  /** What a blank field falls back to, so the hint can say it out loud. */
+  const fallback = (field) => {
+    // A grace period of 0 is a real setting, so test for null rather than falsy.
+    if (department?.[field] != null) return `${department.name} — ${department[field]}`;
+    if (policy?.[field] != null) return `office default — ${policy[field]}`;
+    return 'not set anywhere';
+  };
+
   const save = async () => {
     setBusy(true);
     try {
+      // A blank timing is sent as null, which clears this person's override so
+      // they go back to their department's hours.
+      const blankToNull = (v) => (v === '' || v === null ? null : v);
       const payload = {
         name: form.name,
         phone: form.phone || null,
         departmentId: form.departmentId || null,
         jobRoleIds: form.jobRoleIds,
         isManager: form.isManager,
+        shiftStart: blankToNull(form.shiftStart),
+        halfDayAfter: blankToNull(form.halfDayAfter),
+        graceMinutes: form.graceMinutes === '' ? null : Number(form.graceMinutes),
+        weeklyReportDay: form.weeklyReportDay === '' ? null : Number(form.weeklyReportDay),
+        dailyTarget: form.dailyTarget === '' ? null : Number(form.dailyTarget),
+        autopilot: form.autopilot === 'ON' ? true : form.autopilot === 'OFF' ? false : null,
       };
       if (can('salary.edit')) {
         payload.salaryType = form.salaryType;
@@ -492,6 +678,87 @@ function EditUserModal({ user, onClose, onSaved }) {
             </div>
           </Field>
         )}
+
+        {/* Only for the few people whose hours differ from their department's. */}
+        <div className="rounded-xl border border-ink-200 p-4 sm:col-span-2 dark:border-white/10">
+          <p className="text-sm font-semibold">Office timing for this employee</p>
+          <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
+            Leave a box blank and this person follows their department, or the office-wide rules.
+            Fill one in only when their hours are genuinely different.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Field label="Shift starts" hint={form.shiftStart ? undefined : `Using ${fallback('shiftStart')}`}>
+              <input
+                type="time"
+                className="input"
+                value={form.shiftStart}
+                onChange={(e) => setForm({ ...form, shiftStart: e.target.value })}
+              />
+            </Field>
+            <Field
+              label="Grace (minutes)"
+              hint={form.graceMinutes === '' ? `Using ${fallback('graceMinutes')}` : undefined}
+            >
+              <input
+                type="number"
+                min={0}
+                max={240}
+                className="input"
+                value={form.graceMinutes}
+                onChange={(e) => setForm({ ...form, graceMinutes: e.target.value })}
+              />
+            </Field>
+            <Field label="Half day after" hint={form.halfDayAfter ? undefined : `Using ${fallback('halfDayAfter')}`}>
+              <input
+                type="time"
+                className="input"
+                value={form.halfDayAfter}
+                onChange={(e) => setForm({ ...form, halfDayAfter: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Field label="Weekly report day" hint="Only if different from everyone else">
+              <select
+                className="input"
+                value={form.weeklyReportDay}
+                onChange={(e) => setForm({ ...form, weeklyReportDay: e.target.value })}
+              >
+                <option value="">Office setting</option>
+                {DAY_NAMES.map((d, i) => (
+                  <option key={d} value={i}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Daily target"
+              hint={`Units per day.${department?.dailyTarget ? ` Dept: ${department.dailyTarget}` : ''}`}
+            >
+              <input
+                type="number"
+                min={0}
+                className="input"
+                value={form.dailyTarget}
+                onChange={(e) => setForm({ ...form, dailyTarget: e.target.value })}
+                placeholder={department?.dailyTarget ? `${department.dailyTarget}` : '—'}
+              />
+            </Field>
+            <Field label="Work approval" hint="Autopilot skips approval">
+              <select
+                className="input"
+                value={form.autopilot}
+                onChange={(e) => setForm({ ...form, autopilot: e.target.value })}
+              >
+                <option value="">Follow department</option>
+                <option value="ON">Autopilot (auto-approve)</option>
+                <option value="OFF">Always needs approval</option>
+              </select>
+            </Field>
+          </div>
+        </div>
 
         {can('salary.edit') && (
           <>

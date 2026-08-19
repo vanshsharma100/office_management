@@ -47,6 +47,16 @@ export function statePathFor(configPath) {
   return path.join(path.dirname(configPath), 'state.json');
 }
 
+/** Loopback, or one of the RFC1918 ranges a home/office router hands out. */
+function isOfficeNetwork(url) {
+  const host = String(url).replace(/^https?:\/\//i, '').split(/[:/]/)[0];
+  if (/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i.test(host)) return true;
+  const m = host.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
+
 export function loadConfig(argv = process.argv) {
   const configPath = resolveConfigPath(argv);
 
@@ -65,16 +75,38 @@ export function loadConfig(argv = process.argv) {
   const missing = [];
   if (!cfg.apiUrl) missing.push('apiUrl');
   if (!cfg.agentKey) missing.push('agentKey');
-  if (!cfg.sql?.server) missing.push('sql.server');
-  if (!cfg.sql?.database) missing.push('sql.database');
-  if (!cfg.sql?.user) missing.push('sql.user');
-  if (!cfg.sql?.password) missing.push('sql.password');
+
+  // An Access database is one file and usually one password; SQL Server needs
+  // a host and a login. Asking for the wrong set is the fastest way to make a
+  // working setup look broken, so each driver is checked on its own terms.
+  const driver = String(cfg.sql?.driver || 'mssql').toLowerCase();
+  if (driver === 'access') {
+    if (!cfg.sql?.file) missing.push('sql.file');
+  } else {
+    if (!cfg.sql?.server) missing.push('sql.server');
+    if (!cfg.sql?.database) missing.push('sql.database');
+    if (!cfg.sql?.user) missing.push('sql.user');
+    if (!cfg.sql?.password) missing.push('sql.password');
+  }
   if (missing.length) throw new Error(`${configPath} is missing: ${missing.join(', ')}`);
 
-  // A plain-HTTP endpoint would put the agent key and every employee's
-  // movements on the wire in the clear.
-  if (!/^https:/i.test(cfg.apiUrl) && !/^http:\/\/localhost/i.test(cfg.apiUrl)) {
-    throw new Error(`apiUrl must be https:// (got ${cfg.apiUrl})`);
+  // A plain-HTTP endpoint on the open internet would put the office key and
+  // every employee's movements on the wire in the clear. Inside the office
+  // network it is how you test before there is a certificate to talk to, so
+  // loopback and private LAN addresses are allowed — loudly.
+  if (!/^https:/i.test(cfg.apiUrl)) {
+    if (isOfficeNetwork(cfg.apiUrl)) {
+      console.warn(
+        `\n  WARNING  ${cfg.apiUrl} is plain HTTP. Fine on your own network while\n` +
+          `           testing. Move to https:// before this leaves the office.\n`
+      );
+    } else {
+      throw new Error(
+        `apiUrl must be https:// (got ${cfg.apiUrl}).\n` +
+          `Plain http is only allowed for localhost or a private LAN address ` +
+          `such as http://192.168.1.50:4001 while testing.`
+      );
+    }
   }
 
   cfg.sync = {

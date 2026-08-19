@@ -14,6 +14,7 @@ import { asyncHandler, HttpError } from '../middleware/error.js';
 import { listUser } from '../services/serialize.js';
 import { workSeries, workTotals } from '../services/work.js';
 import { lastNDays, monthRange, currentMonth, todayISO, yesterdayISO } from '../lib/dates.js';
+import { graceMinutes, hhmm } from '../lib/validators.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -122,6 +123,10 @@ router.post(
         icon: z.string().default('Building2'),
         color: z.string().default('indigo'),
         target: z.number().int().min(0).default(0),
+        dailyTarget: z.number().int().min(0).default(0),
+        shiftStart: hhmm,
+        graceMinutes,
+        halfDayAfter: hhmm,
       })
       .parse(req.body);
 
@@ -153,7 +158,13 @@ router.patch(
         color: z.string().optional(),
         target: z.number().int().min(0).optional(),
         targetPeriod: z.enum(['WEEK', 'MONTH']).optional(),
+        dailyTarget: z.number().int().min(0).optional(),
         sortOrder: z.number().int().optional(),
+        // Shift timing for this department. Null clears it and the department
+        // goes back to the office-wide policy.
+        shiftStart: hhmm,
+        graceMinutes,
+        halfDayAfter: hhmm,
       })
       .parse(req.body);
 

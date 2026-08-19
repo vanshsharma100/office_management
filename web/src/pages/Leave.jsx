@@ -7,17 +7,25 @@ import { prettyDate, timeAgo, todayISO } from '../lib/format';
 import { Avatar, Badge, Card, Empty, Field, Modal, SectionTitle, Spinner, StatusBadge, Tabs } from '../components/ui';
 
 const TYPES = [
-  { value: 'SICK', label: 'Sick', hint: 'Paid' },
-  { value: 'URGENT', label: 'Urgent', hint: 'Unpaid' },
-  { value: 'CASUAL', label: 'Casual', hint: 'Paid' },
-  { value: 'EMERGENCY', label: 'Emergency', hint: 'Unpaid' },
+  { value: 'SICK', label: 'Sick', hint: 'Usually no deduction' },
+  { value: 'URGENT', label: 'Urgent', hint: 'Usually deducted' },
+  { value: 'CASUAL', label: 'Casual', hint: 'Usually no deduction' },
+  { value: 'EMERGENCY', label: 'Emergency', hint: 'Usually deducted' },
   { value: 'HALF_DAY', label: 'Half day', hint: 'Half pay' },
   { value: 'WFH', label: 'Work from home', hint: 'Submit work until 10 PM' },
   { value: 'OTHER', label: 'Other', hint: 'Type your own reason' },
 ];
 
-/** Which option the approve dialog pre-selects. The approver can always change it. */
-const PAID_BY_DEFAULT = ['SICK', 'PAID', 'WFH', 'CASUAL'];
+/**
+ * House rule (13.4): tagging an approved leave "Paid" means the company covered
+ * the day, so it comes out of the employee's salary. "Unpaid" costs nothing.
+ * These types pre-select Paid — the approver can always change it.
+ */
+const DEDUCTS_BY_DEFAULT = ['URGENT', 'EMERGENCY', 'PAID'];
+
+/** The money consequence, spelled out wherever the tag is shown. */
+const payLabel = (isPaid) =>
+  isPaid ? 'paid · a day deducted' : 'unpaid · no deduction';
 
 export default function Leave() {
   const { can, isEmployee } = useAuth();
@@ -43,9 +51,9 @@ function AllRequests() {
   const [reviewing, setReviewing] = useState(null);
   const [approving, setApproving] = useState(null);
   const [note, setNote] = useState('');
-  // Whether the leave pays is the approver's call, not the leave type's. The
-  // type only decides which option is pre-selected.
-  const [isPaid, setIsPaid] = useState(true);
+  // Whether the leave costs the employee is the approver's call, not the leave
+  // type's. The type only decides which option is pre-selected.
+  const [isPaid, setIsPaid] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -67,13 +75,15 @@ function AllRequests() {
       });
       toast(
         decision === 'APPROVE'
-          ? `Approved as ${isPaid ? 'paid' : 'unpaid'} — attendance and salary updated for those days.`
+          ? isPaid
+            ? 'Approved as paid — a day of salary is deducted for each day.'
+            : 'Approved as unpaid — attendance is updated and salary is untouched.'
           : 'Rejected. The employee will see it in their leave history.'
       );
       setReviewing(null);
       setApproving(null);
       setNote('');
-      setIsPaid(true);
+      setIsPaid(false);
       load();
     } catch (e) {
       toast(e.message, 'error');
@@ -115,6 +125,9 @@ function AllRequests() {
                     <p className="truncate font-semibold">{r.user.name}</p>
                     <Badge tone="sky">{r.type.replace('_', ' ').toLowerCase()}</Badge>
                     <StatusBadge status={r.status} />
+                    {r.status === 'APPROVED' && r.isPaid !== null && (
+                      <Badge tone={r.isPaid ? 'amber' : 'green'}>{payLabel(r.isPaid)}</Badge>
+                    )}
                   </div>
                   <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
                     {r.user.employeeId} · {prettyDate(r.fromDate)} → {prettyDate(r.toDate)} · asked {timeAgo(r.createdAt)}
@@ -133,7 +146,7 @@ function AllRequests() {
                 <div className="mt-3 flex gap-2 border-t border-ink-200/70 pt-3 dark:border-white/10">
                   <button
                     onClick={() => {
-                      setIsPaid(PAID_BY_DEFAULT.includes(r.type));
+                      setIsPaid(DEDUCTS_BY_DEFAULT.includes(r.type));
                       setApproving(r);
                     }}
                     className="btn-success btn-sm flex-1"
@@ -190,11 +203,11 @@ function AllRequests() {
           </>
         }
       >
-        <Field label="Does this leave pay?">
+        <Field label="Is the company paying for this leave?">
           <div className="flex gap-2">
             {[
-              { paid: true, label: 'Paid', hint: 'Salary is unaffected' },
-              { paid: false, label: 'Unpaid', hint: 'One day of salary is deducted per day' },
+              { paid: true, label: 'Paid', hint: 'A day of salary is deducted for each day' },
+              { paid: false, label: 'Unpaid', hint: 'Salary is not touched' },
             ].map((opt) => (
               <button
                 key={opt.label}
@@ -284,6 +297,9 @@ function MyLeave() {
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="sky">{r.type.replace('_', ' ').toLowerCase()}</Badge>
                 <StatusBadge status={r.status} />
+                {r.status === 'APPROVED' && r.isPaid !== null && (
+                  <Badge tone={r.isPaid ? 'amber' : 'green'}>{payLabel(r.isPaid)}</Badge>
+                )}
                 <span className="ml-auto text-xs text-ink-500">{timeAgo(r.createdAt)}</span>
               </div>
               <p className="mt-2 text-sm font-semibold">

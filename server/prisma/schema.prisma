@@ -43,6 +43,36 @@ model User {
   salaryType   String    @default("MONTHLY") // MONTHLY | HOURLY
   salaryAmount Float     @default(0)
 
+  // Optional per-person shift overrides, for the few whose hours differ from
+  // everyone else's. Null means "use the department's rule, or the office-wide
+  // policy" — so nobody has to fill these in for staff on normal hours.
+  shiftStart   String? // HH:MM
+  graceMinutes Int?
+  halfDayAfter String? // HH:MM
+
+  /// The day this person's weekly report opens, when it differs from the
+  /// office's. Null means "use the office setting". 0 = Sunday.
+  weeklyReportDay Int?
+
+  /// Units this person is expected to finish in a day. Null means "use the
+  /// department's". Feeds the Progress health metric: hit it, full marks.
+  dailyTarget Int?
+
+  /// Per-person task-approval override. Null follows the department; true puts
+  /// this one person on autopilot; false forces approval even if the
+  /// department is on autopilot.
+  autopilot Boolean?
+
+  // Personal details the employee owns and maintains themselves. Pay, role,
+  // department and job roles stay with the Admin — see routes/users.js.
+  address          String?
+  emergencyContact String?
+
+  /// Where a sign-in reset link is sent. Deliberately separate from `email`,
+  /// which is office contact detail an Admin maintains — this one is the way
+  /// back in, so it is only ever set by the account holder.
+  recoveryEmail String?
+
   mustChangePassword Boolean  @default(false)
   lastLoginAt        DateTime?
   createdAt          DateTime @default(now())
@@ -72,6 +102,9 @@ model User {
   punches           BiometricPunch[]
   presenceRequests  AttendanceRequest[] @relation("PresenceOwner")
   reviewedPresence  AttendanceRequest[] @relation("PresenceReviewer")
+  weeklyReports     WeeklyReport[]      @relation("WeeklyReportOwner")
+  resetTokens       PasswordResetToken[]
+  healthReports     HealthReport[]      @relation("HealthOwner")
 
   @@index([role])
   @@index([departmentId])
@@ -91,6 +124,7 @@ model Department {
   autopilot Boolean  @default(false) // 10.3
   target    Int      @default(0) // 6.4 shipment / period target
   targetPeriod String @default("MONTH") // WEEK | MONTH
+  dailyTarget Int     @default(0) // units expected per person per day (health Progress)
 
   // Optional per-department shift overrides. Null means "use the global policy",
   // so a single office never has to fill these in.
@@ -408,6 +442,106 @@ model Setting {
   value String
 }
 
+/// The employee health scorecard — one per employee per month (Section 13.7).
+///
+/// Ten qualities, each out of 10. Three of them (punctuality, attendance,
+/// progress) are computed from attendance and work and stored here only when
+/// an admin overrides the computed value — a null means "use the live figure".
+/// The seven judgement metrics are typed by the admin; null means "not scored
+/// yet", and a key listed in `naKeys` means "not applicable, leave out of the
+/// average" (this is what makes AI Use optional).
+model HealthReport {
+  id     String @id @default(cuid())
+  userId String
+  month  String // YYYY-MM
+
+  // Auto metrics: null = use the computed value, a number = admin override.
+  punctuality Float?
+  attendance  Float?
+  progress    Float?
+
+  // Judgement metrics: null = not scored, a number = the score.
+  dedication   Float?
+  learning     Float?
+  aiUse        Float?
+  careless     Float?
+  behaviour    Float?
+  productivity Float?
+  cleanliness  Float?
+
+  /// JSON array of metric keys the admin marked "N/A" for this month.
+  naKeys String @default("[]")
+
+  note        String?
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  user User @relation("HealthOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@index([month])
+}
+
+/// Everything a reset removed, kept whole so a wiped year can still be read
+/// back or handed to an accountant. The reset is the only thing that writes
+/// here, and nothing ever edits a row afterwards.
+model DataArchive {
+  id          String   @id @default(cuid())
+  label       String // e.g. "Reset on 14 Aug 2026"
+  createdById String
+  createdByName String
+  counts      String   @default("{}") // JSON: how many rows of each kind
+  payload     String // JSON of the removed records
+  createdAt   DateTime @default(now())
+}
+
+/// A single-use, short-lived key emailed to somebody who cannot sign in.
+///
+/// Only the hash is stored, exactly like the office key: a stolen database
+/// gives an attacker nothing they can use to take over an account.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// The weekly report — one per employee per week.
+///
+/// The questions are fixed, so only the answers are stored. Name, department
+/// and the week itself are never retyped: they come from the account and the
+/// calendar, which also means they cannot disagree with the rest of the system.
+///
+/// A week with no row is "missing" once its filling window has closed. Nothing
+/// is created empty, so missing is the absence of a row rather than a state
+/// somebody has to maintain.
+model WeeklyReport {
+  id              String   @id @default(cuid())
+  userId          String
+  weekStart       String // YYYY-MM-DD, the Monday the week begins
+  tasksAssigned   String
+  tasksCompleted  String
+  pendingTasks    String?
+  keyAchievement  String?
+  challenges      String?
+  nextWeekPlan    String?
+  supportRequired String?
+  submittedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation("WeeklyReportOwner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+  @@index([weekStart])
+}
+
 // ─────────────────────────────────────────── Biometric attendance sync (§new)
 //
 // Attendance is collected by the OnTime / Secure Eyes device into a SQL Server
@@ -479,6 +613,13 @@ model AttendancePolicy {
   dayCloseTime      String? // HH:MM — absence is only decided after this
   requestWindowDays Int? // how far back a manual presence request may reach
   timezone          String   @default("Asia/Kolkata")
+
+  // Money penalties. Null or 0 means the office has not switched the fine on,
+  // and nothing is ever charged — same "unset rules do not apply" idea as the
+  // timing fields above.
+  freeLatesPerMonth Int? // late arrivals forgiven each month before any fine
+  lateFineAmount    Float? // flat amount per late arrival past the free ones
+  halfDayFineAmount Float? // flat amount per half day, on top of the half day's lost pay
   updatedAt         DateTime @updatedAt
 }
 

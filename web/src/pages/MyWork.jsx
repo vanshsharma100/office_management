@@ -19,7 +19,7 @@ import api from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useUI } from '../context/UIContext';
 import { addDays, num, prettyDate, prettyDateTime, todayISO } from '../lib/format';
-import { Badge, Card, Empty, SectionTitle, Spinner, StatusBadge, Stepper, Tabs } from '../components/ui';
+import { Badge, Card, Empty, Field, SectionTitle, Spinner, StatusBadge, Stepper, Tabs } from '../components/ui';
 import { WorkTrend } from '../components/charts';
 
 /** Section 16.2 — whatever is typed survives bad warehouse wifi. */
@@ -31,6 +31,9 @@ export default function MyWork() {
   const [date, setDate] = useState(todayISO());
   const [form, setForm] = useState(null);
   const [values, setValues] = useState({});
+  // Anything that went wrong today. Reaches the approver with the numbers, so
+  // a low count arrives with its reason instead of looking like slack work.
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('today');
@@ -76,6 +79,7 @@ export default function MyWork() {
         }
       }
       setValues(base);
+      setNote(data.submission?.note ?? '');
       loadedFor.current = date;
     } catch (e) {
       toast(e.message, 'error');
@@ -118,7 +122,7 @@ export default function MyWork() {
         value: Number(v.value) || 0,
         failedValue: Number(v.failedValue) || 0,
       }));
-      const { data } = await api.post('/work/submit', { date, entries });
+      const { data } = await api.post('/work/submit', { date, entries, note: note.trim() || null });
       localStorage.removeItem(draftKey(user.id, date));
       setDirty(false);
       toast(
@@ -233,18 +237,29 @@ export default function MyWork() {
             </Banner>
           )}
 
-          {/* The form: only this person's role questions (Section 4) */}
-          {form?.groups?.length === 0 ? (
+          {/* The form: only this person's role questions (Section 4).
+              A failed load leaves `form` null — without the `?? []` the map
+              below throws and the whole screen goes blank, which reads as the
+              app being broken rather than the request having failed. */}
+          {(form?.groups ?? []).length === 0 ? (
             <Card>
-              <Empty
-                title="No job role assigned"
-                hint="Ask your Admin to assign your job role so your questions appear here."
-                icon={ClipboardList}
-              />
+              {form ? (
+                <Empty
+                  title="No job role assigned"
+                  hint="Ask your Admin to assign your job role so your questions appear here."
+                  icon={ClipboardList}
+                />
+              ) : (
+                <Empty
+                  title="Could not open your form"
+                  hint="Check your connection and pull to refresh, or try again in a moment."
+                  icon={CloudOff}
+                />
+              )}
             </Card>
           ) : (
             <div className="space-y-4">
-              {form.groups.map((group) => (
+              {(form?.groups ?? []).map((group) => (
                 <Card key={group.jobRoleId} className="p-5">
                   <SectionTitle
                     title={t(group.jobRole, group.jobRoleHi)}
@@ -297,6 +312,28 @@ export default function MyWork() {
         </>
       ) : (
         <HistoryTab history={history} />
+      )}
+
+      {/* Last box before submitting: anything that went wrong today. It travels
+          with the numbers, so a low count reaches the approver with its reason. */}
+      {tab === 'today' && form?.groups?.length > 0 && (
+        <Card className="p-5">
+          <Field
+            label="Any problem with the work today?"
+            hint="Optional — machine down, material short, anything the approver should know"
+          >
+            <textarea
+              className="input min-h-20"
+              value={note}
+              onChange={(e) => {
+                setDirty(true);
+                setNote(e.target.value);
+              }}
+              disabled={locked || !form.canSubmit}
+              placeholder="e.g. Printer stopped working after lunch, waiting for a part."
+            />
+          </Field>
+        </Card>
       )}
 
       {/* Sticky submit bar — thumb reach on a phone */}

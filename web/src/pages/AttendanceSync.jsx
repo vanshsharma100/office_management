@@ -30,6 +30,9 @@ const BLANK_POLICY = {
   dayCloseTime: '',
   requestWindowDays: '',
   timezone: 'Asia/Kolkata',
+  freeLatesPerMonth: '',
+  lateFineAmount: '',
+  halfDayFineAmount: '',
 };
 
 export default function AttendanceSyncPage() {
@@ -307,6 +310,48 @@ export default function AttendanceSyncPage() {
             Shifts cross midnight
           </label>
 
+          {/* Fines are money, so they stay visually separate from the timing
+              rules above and default to off until an amount is typed in. */}
+          <div className="rounded-xl border border-ink-200 p-4 dark:border-white/10">
+            <p className="text-sm font-semibold">Late & half day fines</p>
+            <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
+              Leave the amounts blank and nobody is ever fined. A day counted as a half day is
+              charged the half day fine only, never the late fine as well.
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+              <Field label="Free lates each month" hint="Forgiven before any fine starts">
+                <input
+                  type="number"
+                  min="0"
+                  max="31"
+                  className="input"
+                  value={policy.freeLatesPerMonth}
+                  onChange={set(setPolicy, 'freeLatesPerMonth')}
+                />
+              </Field>
+              <Field label="Fine per late arrival (₹)" hint="Charged on every late day after the free ones">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="input"
+                  value={policy.lateFineAmount}
+                  onChange={set(setPolicy, 'lateFineAmount')}
+                />
+              </Field>
+              <Field label="Fine per half day (₹)" hint="On top of the half day's lost pay">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="input"
+                  value={policy.halfDayFineAmount}
+                  onChange={set(setPolicy, 'halfDayFineAmount')}
+                />
+              </Field>
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <button type="submit" className="btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Save rules'}
@@ -445,5 +490,8 @@ function toApi(p) {
     dayCloseTime: str(p.dayCloseTime),
     requestWindowDays: num(p.requestWindowDays),
     timezone: p.timezone || 'Asia/Kolkata',
+    freeLatesPerMonth: num(p.freeLatesPerMonth),
+    lateFineAmount: num(p.lateFineAmount),
+    halfDayFineAmount: num(p.halfDayFineAmount),
   };
 }

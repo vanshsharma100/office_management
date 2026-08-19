@@ -1,23 +1,35 @@
 {
-  "//": "Copy to config.json and fill in. config.json is gitignored and must never be committed — it holds the SQL password and the agent key.",
+  "//": "Copy to config.json and fill in. config.json is gitignored and must never be committed — it holds the database password and the office key.",
 
   "apiUrl": "https://office.yourdomain.com",
+  "//agentKey": "The office key. Settings → Attendance sync → Add office PC shows it once.",
   "agentKey": "ftk_paste-the-key-shown-once-when-you-registered-this-pc",
 
   "sql": {
-    "//": "Use EITHER port (recommended, needs a static port) OR instanceName (needs SQL Server Browser running).",
+    "//driver": "'access' for ONtime's .mdb file. 'mssql' for SQL Server Express — then use the server/port/database/user block instead of file.",
+    "driver": "access",
+
+    "//file": "Full path to the ONtime database on THIS pc. Right-click it in Explorer → Properties to copy the path.",
+    "file": "C:\\Program Files (x86)\\ONtime\\ontime_att.mdb",
+    "//password": "The database password, if the .mdb has one. ONtime's .mdb IS password protected and the password is not in ONtime.exe.config - get it from your ONtime dealer/installer.",
+    "password": "",
+    "//provider": "ONtime uses Jet 4.0 (see its ONtime.exe.config). Jet is 32-bit only, so pair it with powershell:'32'. Newer software may use Microsoft.ACE.OLEDB.12.0 instead.",
+    "provider": "Microsoft.Jet.OLEDB.4.0",
+    "//powershell": "'32' for Jet 4.0. 'auto' or '64' only for ACE.",
+    "powershell": "32",
+
+    "//sqlServerOnly": "Ignored when driver is 'access'.",
     "server": "localhost",
     "port": 1433,
     "instanceName": null,
     "database": "eTimeTrackLite1",
     "user": "ftech_sync",
-    "password": "",
     "encrypt": true,
     "trustServerCertificate": true
   },
 
   "query": {
-    "//": "Which table holds the punches, and what its columns are called. Run `npm run discover` to list them.",
+    "//": "Which table holds the punches, and what its columns are called. Run `npm run discover` to list them — ONtime does not name these the same as other software.",
     "table": "DeviceLogs",
     "columns": {
       "id": "DeviceLogId",

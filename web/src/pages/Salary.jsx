@@ -93,11 +93,33 @@ function MySalary() {
                 tone="red"
               />
             )}
-            {salary.deductions?.unpaidLeave > 0 && (
+            {salary.deductions?.chargedLeave > 0 && (
               <Row
-                label={`Unpaid leave · ${salary.unpaidLeaveDays} day${salary.unpaidLeaveDays === 1 ? '' : 's'}`}
-                value={`− ${moneyExact(salary.deductions.unpaidLeave)}`}
+                label={`Paid leave · ${salary.chargedLeaveDays} day${salary.chargedLeaveDays === 1 ? '' : 's'}`}
+                value={`− ${moneyExact(salary.deductions.chargedLeave)}`}
                 tone="red"
+              />
+            )}
+            {salary.deductions?.lateFine > 0 && (
+              <Row
+                label={`Late fine · ${salary.finedLateDays} of ${salary.lateDays} late day${salary.lateDays === 1 ? '' : 's'}`}
+                value={`− ${moneyExact(salary.deductions.lateFine)}`}
+                tone="red"
+              />
+            )}
+            {salary.deductions?.halfDayFine > 0 && (
+              <Row
+                label={`Half day fine · ${salary.halfDays}`}
+                value={`− ${moneyExact(salary.deductions.halfDayFine)}`}
+                tone="red"
+              />
+            )}
+            {/* Lateness inside the monthly allowance costs nothing — say so,
+                rather than leaving the employee to wonder. */}
+            {salary.lateDays > 0 && !salary.deductions?.lateFine && salary.freeLatesPerMonth > 0 && (
+              <Row
+                label={`Late · ${salary.lateDays} day${salary.lateDays === 1 ? '' : 's'}`}
+                value={`within the ${salary.freeLatesPerMonth} free`}
               />
             )}
 

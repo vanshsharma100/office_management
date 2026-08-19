@@ -1,6 +1,10 @@
 import prisma from '../lib/prisma.js';
 import { todayISO } from '../lib/dates.js';
-import { ATTENDANCE_STATUS } from '../lib/constants.js';
+import {
+  ATTENDANCE_EXEMPT_ROLES,
+  ATTENDANCE_STATUS,
+  attendanceStatusForLeave,
+} from '../lib/constants.js';
 
 /**
  * Turns raw biometric punches into one attendance row per employee per day.
@@ -35,6 +39,9 @@ const DEFAULT_POLICY = {
   dayCloseTime: null,
   requestWindowDays: null,
   timezone: 'Asia/Kolkata',
+  freeLatesPerMonth: null,
+  lateFineAmount: null,
+  halfDayFineAmount: null,
 };
 
 export async function getPolicy() {
@@ -42,14 +49,21 @@ export async function getPolicy() {
   return row ?? DEFAULT_POLICY;
 }
 
-/** Department overrides win over the global policy, field by field. */
-export function effectivePolicy(policy, department) {
-  if (!department) return policy;
+/**
+ * The rules that actually apply to one person, field by field.
+ *
+ * Most specific wins: the employee's own timing beats their department's,
+ * which beats the office-wide policy. Anything left blank at a level simply
+ * falls through to the next one, so a department can move its start time
+ * without repeating the grace period, and one early-shift employee can be set
+ * without touching anyone else.
+ */
+export function effectivePolicy(policy, department, user) {
   return {
     ...policy,
-    shiftStart: department.shiftStart ?? policy.shiftStart,
-    graceMinutes: department.graceMinutes ?? policy.graceMinutes,
-    halfDayAfter: department.halfDayAfter ?? policy.halfDayAfter,
+    shiftStart: user?.shiftStart ?? department?.shiftStart ?? policy.shiftStart,
+    graceMinutes: user?.graceMinutes ?? department?.graceMinutes ?? policy.graceMinutes,
+    halfDayAfter: user?.halfDayAfter ?? department?.halfDayAfter ?? policy.halfDayAfter,
   };
 }
 
@@ -169,8 +183,14 @@ export async function deriveDate(dateISO, { now = new Date() } = {}) {
   const policy = await getPolicy();
   const [users, punches, holiday, leaves, requests, existing] = await Promise.all([
     prisma.user.findMany({
-      where: { isActive: true, isHidden: false },
-      select: { id: true, departmentId: true },
+      where: { isActive: true, isHidden: false, role: { notIn: ATTENDANCE_EXEMPT_ROLES } },
+      select: {
+        id: true,
+        departmentId: true,
+        shiftStart: true,
+        graceMinutes: true,
+        halfDayAfter: true,
+      },
     }),
     prisma.biometricPunch.findMany({ where: { date: dateISO, userId: { not: null } } }),
     prisma.holiday.findUnique({ where: { date: dateISO } }),
@@ -204,7 +224,7 @@ export async function deriveDate(dateISO, { now = new Date() } = {}) {
       leave: leaveByUser.get(user.id),
       request: requestByUser.get(user.id),
       punches: punchesByUser.get(user.id) ?? [],
-      policy: effectivePolicy(policy, deptById.get(user.departmentId)),
+      policy: effectivePolicy(policy, deptById.get(user.departmentId), user),
       now,
     });
     if (!result) continue; // still NA — write nothing, so the day stays unknown
@@ -255,10 +275,14 @@ function resolveUserDay({ user, dateISO, offDay, holiday, leave, request, punche
   }
 
   if (leave) {
+    // The leave's own type decides the status, exactly as the approval did —
+    // an approved WFH day is a WFH day and a half day is a half day. Reading
+    // every leave as a plain LEAVE here would quietly rewrite both on the next
+    // sync, and each of them pays differently.
     return {
       source: 'SYSTEM',
       fields: {
-        status: ATTENDANCE_STATUS.LEAVE,
+        status: attendanceStatusForLeave(leave.type),
         checkIn: null,
         checkOut: null,
         hours: 0,

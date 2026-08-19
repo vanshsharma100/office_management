@@ -1,0 +1,181 @@
+FTECH OFFICE MANAGEMENT SYSTEM — REQUIREMENTS
+=============================================
+
+What you need on a new machine to run this, and in what order.
+Full deployment notes are in DEPLOY.md. This file is the short version.
+
+
+-----------------------------------------------------------------------------
+1. THE WEB APP  (server + web)
+-----------------------------------------------------------------------------
+
+REQUIRED
+
+  Node.js            20 or newer          https://nodejs.org
+                     Includes npm. Check with:  node -v
+
+  PostgreSQL         14 or newer
+                     Easiest is Docker Desktop:
+                       https://www.docker.com/products/docker-desktop
+                     Then one command creates the database (see step 3 below).
+                     A hosted Postgres (Supabase, Neon, Railway) works too —
+                     just paste its connection string into .env.
+
+  A modern browser   Chrome, Edge or Firefox.
+
+NOT REQUIRED
+  Nothing is installed globally. No Python, no build tools, no compiler.
+  SQLite is NOT supported — the schema is Postgres only.
+
+
+NPM PACKAGES (installed automatically by `npm install`, listed for reference)
+
+  server/
+    @prisma/client        ^6.3.1     database access
+    @prisma/adapter-pg    ^6.19.3    routes queries through the pg driver
+    prisma                ^6.3.1     schema + migrations
+    pg                    ^8.22.0    Postgres driver
+    express               ^4.21.2    web server
+    zod                   ^3.24.1    request validation
+    jsonwebtoken          ^9.0.2     sign-in tokens
+    bcryptjs              ^2.4.3     password hashing
+    helmet                ^8.0.0     security headers
+    cors                  ^2.8.5     browser access control
+    express-rate-limit    ^7.5.0     brute-force guard on sign-in
+    cookie-parser         ^1.4.7
+    compression           ^1.7.5
+    morgan                ^1.10.0    request logging
+    dotenv                ^16.4.7    reads .env
+
+  web/
+    react / react-dom     ^18.3.1
+    react-router-dom      ^6.28.1    page routing
+    vite                  ^6.0.7     dev server and build
+    @vitejs/plugin-react  ^4.3.4
+    tailwindcss           ^3.4.17    styling
+    postcss / autoprefixer
+    axios                 ^1.7.9     API calls
+    recharts              ^2.15.0    charts
+    lucide-react          ^0.474.0   icons
+    clsx                  ^2.1.1
+
+  root/
+    concurrently          ^9.1.2     runs the API and web together in dev
+
+
+-----------------------------------------------------------------------------
+2. THE ATTENDANCE SYNC AGENT  (only on the ONtime PC)
+-----------------------------------------------------------------------------
+
+This is a separate program. It does NOT need to be on the same machine as the
+web app — it runs on the office PC where ONtime is installed, and only makes
+outgoing HTTPS calls to the web app.
+
+REQUIRED
+
+  Windows            The agent reads ONtime's database through Windows.
+
+  Node.js            20 or newer.
+
+  ONtime             Already installed on that PC, and — this is the part
+                     people miss — still DOWNLOADING from the biometric
+                     device. The agent forwards what ONtime has already
+                     collected. It does not talk to the device itself.
+
+  ACE OLE DB         Almost certainly already there, because ONtime uses it.
+  provider           If the agent reports "provider is not registered",
+                     install the Access Database Engine redistributable,
+                     matching your Office/ONtime bitness (32 or 64):
+                       https://www.microsoft.com/download/details.aspx?id=54920
+
+  An office key      Created in the web app:
+                     Super Admin -> Attendance sync -> Add office PC.
+                     Shown ONCE. Copy it immediately.
+
+NPM PACKAGES
+    mssql                 ^11.0.1    only used when sql.driver is "mssql"
+                                     Access needs no package at all.
+
+Full setup: agent/README.md
+
+
+-----------------------------------------------------------------------------
+3. FIRST RUN, START TO FINISH
+-----------------------------------------------------------------------------
+
+From the project folder:
+
+  Step 1 — start a database (skip if you have a hosted one)
+
+      docker run -d --name ftech-office-db -p 5434:5432 ^
+        -e POSTGRES_DB=ftech -e POSTGRES_USER=ftech -e POSTGRES_PASSWORD=dev ^
+        postgres:16-alpine
+
+      (Windows CMD uses ^ to continue a line. In PowerShell use ` instead,
+      or just put it all on one line.)
+
+  Step 2 — create your settings file
+
+      copy .env.example .env
+
+      Then open .env and set, at minimum:
+        DATABASE_URL   must match the database from step 1
+        JWT_SECRET     any long random string. Never leave the default.
+        SUPER_ADMIN_PASSWORD and BACKUP_ADMIN_PASSWORD
+
+      NOTE: .env is NOT included in this zip on purpose. It holds passwords
+      and the token-signing secret, and those should not travel in a file
+      people pass around.
+
+  Step 3 — install and set up the database
+
+      npm install
+      npm run db:check      confirms the connection string works
+      npm run db:setup      creates the tables and the first accounts
+
+  Step 4 — run it
+
+      npm run dev
+
+      Web  ->  http://localhost:5173
+      API  ->  http://localhost:4001/api
+
+      Sign in with SUPER_ADMIN_USERNAME / SUPER_ADMIN_PASSWORD from .env.
+
+  Step 5 — after signing in
+
+      Settings -> Company logo           upload your logo
+      Attendance sync                    set shift timings, add the office PC
+      Departments / Employees            per-department and per-person timings
+
+
+-----------------------------------------------------------------------------
+4. PORTS
+-----------------------------------------------------------------------------
+
+  5173    web (development)
+  4001    API           set by API_PORT in .env
+  5434    Postgres      only if you run it in Docker as above
+
+If a port is taken, change it in .env. Keep VITE_API_URL and CORS_ORIGIN
+pointing at the ports you actually used, or the browser will be blocked.
+
+
+-----------------------------------------------------------------------------
+5. THINGS THAT COMMONLY GO WRONG
+-----------------------------------------------------------------------------
+
+  "db:check fails"
+      The database is not running, or DATABASE_URL is wrong. db:check tells
+      you which of the two in seconds instead of a five-minute deploy cycle.
+
+  "Sign-in says wrong password"
+      The seeded accounts are created ONCE, the first time the database is
+      seeded. Changing SUPER_ADMIN_PASSWORD in .env afterwards does nothing.
+      Change it from Settings -> Change password instead.
+
+  "EPERM ... query_engine-windows.dll.node" during install
+      The API server is running and holding the file. Stop it, then re-run.
+
+  "Blank page, console shows CORS"
+      CORS_ORIGIN in .env does not list the address you opened the site on.

@@ -14,6 +14,7 @@ import {
   assertCanTouchPay,
 } from '../middleware/auth.js';
 import { asyncHandler, HttpError } from '../middleware/error.js';
+import { graceMinutes, hhmm } from '../lib/validators.js';
 import { publicUser, listUser } from '../services/serialize.js';
 import { computeSalary } from '../services/salary.js';
 import { workSeries, workTotals } from '../services/work.js';
@@ -49,12 +50,15 @@ router.get(
         ...(role ? { role } : {}),
         ...(status === 'active' ? { isActive: true } : {}),
         ...(status === 'inactive' ? { isActive: false } : {}),
+        // `insensitive` is not optional on Postgres: plain `contains` is LIKE,
+        // so searching "vansh" would miss "Vansh" and typing an employee id in
+        // lower case would find nobody.
         ...(q
           ? {
               OR: [
-                { name: { contains: String(q) } },
-                { username: { contains: String(q) } },
-                { employeeId: { contains: String(q) } },
+                { name: { contains: String(q), mode: 'insensitive' } },
+                { username: { contains: String(q), mode: 'insensitive' } },
+                { employeeId: { contains: String(q), mode: 'insensitive' } },
               ],
             }
           : {}),
@@ -236,11 +240,18 @@ router.patch(
         name: z.string().min(2).max(60).optional(),
         phone: z.string().max(20).nullish(),
         email: z.string().email().nullish().or(z.literal('')),
+        // Personal details, which the employee owns. Pay, department, job role
+        // and biometric id are deliberately absent — those belong to an Admin.
+        address: z.string().max(300).nullish(),
+        emergencyContact: z.string().max(120).nullish(),
+        // The way back in, so only the account holder ever sets it.
+        recoveryEmail: z.string().email().nullish().or(z.literal('')),
       })
       .parse(req.body);
 
     const data = { ...body };
     if (data.email === '') data.email = null;
+    if (data.recoveryEmail === '') data.recoveryEmail = null;
 
     const before = await prisma.user.findUnique({ where: { id: req.user.id } });
     const user = await prisma.user.update({
@@ -280,6 +291,16 @@ router.patch(
         isManager: z.boolean().optional(),
         isActive: z.boolean().optional(),
         role: z.enum([ROLES.ADMIN, ROLES.EMPLOYEE, ROLES.SUPER_ADMIN]).optional(),
+        // Personal shift timing. Null clears the override and hands the person
+        // back to their department's hours (see services/attendanceDerive.js).
+        shiftStart: hhmm,
+        graceMinutes,
+        halfDayAfter: hhmm,
+        // Null hands this person back to the office-wide report day.
+        weeklyReportDay: z.number().int().min(0).max(6).nullish(),
+        // Null = follow the department for these two.
+        dailyTarget: z.number().int().min(0).nullish(),
+        autopilot: z.boolean().nullish(),
       })
       .parse(req.body);
 

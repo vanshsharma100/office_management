@@ -86,7 +86,7 @@ export function requirePermission(permission) {
 
 /**
  * Section 7.2 — hard limits that cannot be granted by anyone.
- * `action` is one of: salary | attendance | leave | work
+ * `action` is one of: salary | attendance | leave | work | presence
  */
 export function assertNotSelfAction(actor, targetUserId, action) {
   if (actor.role === ROLES.SUPER_ADMIN) return;
@@ -96,6 +96,7 @@ export function assertNotSelfAction(actor, targetUserId, action) {
       attendance: 'An Admin cannot edit their own attendance',
       leave: 'An Admin cannot approve their own leave request',
       work: 'An Admin cannot approve their own work submission',
+      presence: 'An Admin cannot approve their own presence request',
     };
     throw new HttpError(403, messages[action] || 'Admins cannot perform this action on themselves');
   }

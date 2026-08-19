@@ -45,7 +45,7 @@ async function discover(cfg) {
   const { connect, listTables, listColumns, close } = await db();
   const pool = await connect(cfg);
   const tables = await listTables(pool);
-  console.log(`\n${tables.length} tables in ${cfg.sql.database}:\n`);
+  console.log(`\n${tables.length} tables in ${cfg.sql.database || cfg.sql.file}:\n`);
   for (const t of tables) console.log(`  ${t.TABLE_SCHEMA}.${t.TABLE_NAME}  (${t.ColumnCount} columns)`);
 
   const guess = tables.find((t) => /devicelog|attendancelog|punch|swipe|inout/i.test(t.TABLE_NAME));
@@ -76,7 +76,7 @@ async function testConnection(cfg) {
   const hello = await new Api(cfg).hello();
   log(`  connected as agent "${hello.agent.name}"; office timezone ${hello.timezone}`);
 
-  log('Testing SQL Server...');
+  log(`Testing the attendance database (${cfg.sql.driver || 'mssql'})...`);
   const pool = await connect(cfg);
   const rows = await fetchPunches(pool, cfg, { lastId: 0, lastPunchAt: null });
   log(`  read ${rows.length} punch rows from ${cfg.query.table}`);
@@ -85,6 +85,63 @@ async function testConnection(cfg) {
   }
   await close();
   log('Both sides are reachable.');
+}
+
+/**
+ * What the vendor database actually holds, day by day.
+ *
+ * Run this before reaching further back with sync.backfillDays. Closing a day
+ * is what lets it be judged, and a closed day with no punches is an absence
+ * for every employee — so a backfill into a period the biometric software
+ * never collected does not import history, it deletes a month of salary.
+ * Nothing here writes anywhere; it only reads and reports.
+ */
+async function showRange(cfg, days) {
+  const { connect, countByDate, close } = await db();
+  const pool = await connect(cfg);
+  const tz = cfg.sync.timezone;
+  const today = localDate(new Date(), tz);
+  const window = Math.abs(Number(days) || 120);
+  const from = shiftDate(today, -window);
+
+  const counts = await countByDate(pool, cfg, from, today);
+  await close();
+
+  const withPunches = [...counts.entries()].filter(([, n]) => n > 0).sort();
+  const total = withPunches.reduce((sum, [, n]) => sum + n, 0);
+
+  console.log(`\nLooking back ${window} days, from ${from} to ${today}.\n`);
+  if (!withPunches.length) {
+    console.log('  No punches at all in this window.');
+    console.log('  Do NOT raise backfillDays — every day would close empty and');
+    console.log('  mark the whole staff absent.\n');
+    return;
+  }
+
+  console.log(`  ${total} punches, on ${withPunches.length} days`);
+  console.log(`  earliest ${withPunches[0][0]}`);
+  console.log(`  latest   ${withPunches[withPunches.length - 1][0]}\n`);
+
+  const byMonth = new Map();
+  for (const [date, n] of withPunches) {
+    const m = date.slice(0, 7);
+    const row = byMonth.get(m) ?? { days: 0, punches: 0 };
+    row.days += 1;
+    row.punches += n;
+    byMonth.set(m, row);
+  }
+
+  console.log('  month     days with punches   punches');
+  for (const [month, row] of [...byMonth.entries()].sort()) {
+    console.log(`  ${month}   ${String(row.days).padStart(11)}   ${String(row.punches).padStart(9)}`);
+  }
+
+  // The number that decides whether a backfill is safe.
+  const earliest = withPunches[0][0];
+  const safeDays = Math.max(0, Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${earliest}T00:00:00Z`)) / 86_400_000));
+  console.log(`\n  Safe to set sync.backfillDays no higher than ${safeDays}.`);
+  console.log(`  Beyond that there is nothing to import, and each empty day`);
+  console.log(`  becomes an absence for everyone.\n`);
 }
 
 /** One pass: drain everything new, then confirm which days are fully collected. */
@@ -194,10 +251,12 @@ async function main() {
   if (argv.has('--discover')) return discover(cfg);
   if (argv.has('--columns')) return showColumns(cfg, process.argv[process.argv.indexOf('--columns') + 1]);
   if (argv.has('--test')) return testConnection(cfg);
+  if (argv.has('--range')) return showRange(cfg, process.argv[process.argv.indexOf('--range') + 1]);
 
   const api = new Api(cfg);
   const interval = Math.max(60, Number(cfg.sync.intervalSeconds) || 900) * 1000;
-  log(`Ftech sync agent starting — ${cfg.sql.server} → ${cfg.apiUrl}, every ${interval / 1000}s`);
+  const source = cfg.sql.driver === 'access' ? cfg.sql.file : cfg.sql.server;
+  log(`Ftech sync agent starting — ${source} → ${cfg.apiUrl}, every ${interval / 1000}s`);
 
   let failures = 0;
   const tick = async () => {

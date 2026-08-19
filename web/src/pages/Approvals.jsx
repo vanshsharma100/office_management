@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCheck, CheckCircle2, ShieldCheck, UserCog, XCircle } from 'lucide-react';
+import { CheckCheck, CheckCircle2, Pencil, ShieldCheck, UserCog, XCircle } from 'lucide-react';
 import api from '../lib/api';
 import { useUI } from '../context/UIContext';
 import { num, prettyDate, prettyDateTime } from '../lib/format';
 import { Avatar, Badge, Card, Empty, Modal, SectionTitle, Spinner } from '../components/ui';
+import EditSubmission from '../components/EditSubmission';
 
 /** Section 10 — submitted work does not count until it is accepted. */
 export default function Approvals() {
@@ -12,6 +13,7 @@ export default function Approvals() {
   const [selected, setSelected] = useState(new Set());
   const [reject, setReject] = useState(null);
   const [reason, setReason] = useState('');
+  const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = () =>
@@ -187,12 +189,30 @@ export default function Approvals() {
                           Defect rate {Math.round((failed / Math.max(1, total)) * 1000) / 10}%
                         </p>
                       )}
+                      {/* What the employee said went wrong. A low count should
+                          never reach a decision without its reason attached. */}
+                      {s.note && (
+                        <div className="mt-2 rounded-lg border border-amber-400/30 bg-amber-500/[.07] p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                            Problem reported
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm">{s.note}</p>
+                        </div>
+                      )}
                       <p className="pt-2 text-[11px] text-ink-500">
                         Submitted {prettyDateTime(s.submittedAt)}
                       </p>
                     </div>
 
                     <div className="flex gap-2 border-t border-ink-200/70 p-3 dark:border-white/10">
+                      <button
+                        onClick={() => setEditing(s)}
+                        disabled={busy}
+                        className="btn-ghost btn-sm"
+                        title="Correct the numbers before approving"
+                      >
+                        <Pencil size={15} />
+                      </button>
                       <button
                         onClick={() => review(s.id, 'APPROVE')}
                         disabled={busy}
@@ -246,6 +266,17 @@ export default function Approvals() {
           autoFocus
         />
       </Modal>
+
+      {editing && (
+        <EditSubmission
+          submission={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }

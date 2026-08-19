@@ -185,13 +185,28 @@ function DepartmentModal({ department, onClose, onSaved }) {
     status: department?.status ?? 'ACTIVE',
     target: department?.target ?? 0,
     targetPeriod: department?.targetPeriod ?? 'MONTH',
+    dailyTarget: department?.dailyTarget ?? 0,
+    shiftStart: department?.shiftStart ?? '',
+    graceMinutes: department?.graceMinutes ?? '',
+    halfDayAfter: department?.halfDayAfter ?? '',
   });
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
     setBusy(true);
     try {
-      const payload = { ...form, target: Number(form.target) || 0, nameHi: form.nameHi || null };
+      // A blank timing is sent as null, which clears the override and hands
+      // the department back to the office-wide rules.
+      const blankToNull = (v) => (v === '' || v === null ? null : v);
+      const payload = {
+        ...form,
+        target: Number(form.target) || 0,
+        dailyTarget: Number(form.dailyTarget) || 0,
+        nameHi: form.nameHi || null,
+        shiftStart: blankToNull(form.shiftStart),
+        halfDayAfter: blankToNull(form.halfDayAfter),
+        graceMinutes: form.graceMinutes === '' ? null : Number(form.graceMinutes),
+      };
       if (department) await api.patch(`/departments/${department.id}`, payload);
       else await api.post('/departments', payload);
       toast(department ? 'Department updated.' : 'Department created. Add job roles next.');
@@ -233,7 +248,7 @@ function DepartmentModal({ department, onClose, onSaved }) {
             <option value="COMING_SOON">Coming soon</option>
           </select>
         </Field>
-        <Field label="Target" hint="Units for the period — drives the pending-against-target view">
+        <Field label="Period target" hint="Units for the period — drives pending-against-target">
           <input
             type="number"
             min={0}
@@ -242,6 +257,52 @@ function DepartmentModal({ department, onClose, onSaved }) {
             onChange={(e) => setForm({ ...form, target: e.target.value })}
           />
         </Field>
+        <Field label="Daily target" hint="Units per person per day — drives the Progress health score">
+          <input
+            type="number"
+            min={0}
+            className="input"
+            value={form.dailyTarget}
+            onChange={(e) => setForm({ ...form, dailyTarget: e.target.value })}
+          />
+        </Field>
+
+        {/* Only for departments that do not work the office's normal hours. */}
+        <div className="rounded-xl border border-ink-200 p-4 sm:col-span-2 dark:border-white/10">
+          <p className="text-sm font-semibold">Office timing for this department</p>
+          <p className="mt-0.5 text-xs text-ink-500 dark:text-ink-400">
+            Leave blank and this department follows the office-wide rules in Attendance sync. A
+            single employee can still be given their own timing, which wins over this.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Field label="Shift starts">
+              <input
+                type="time"
+                className="input"
+                value={form.shiftStart}
+                onChange={(e) => setForm({ ...form, shiftStart: e.target.value })}
+              />
+            </Field>
+            <Field label="Grace (minutes)">
+              <input
+                type="number"
+                min={0}
+                max={240}
+                className="input"
+                value={form.graceMinutes}
+                onChange={(e) => setForm({ ...form, graceMinutes: e.target.value })}
+              />
+            </Field>
+            <Field label="Half day after">
+              <input
+                type="time"
+                className="input"
+                value={form.halfDayAfter}
+                onChange={(e) => setForm({ ...form, halfDayAfter: e.target.value })}
+              />
+            </Field>
+          </div>
+        </div>
       </div>
     </Modal>
   );

@@ -25,7 +25,15 @@ router.get(
   asyncHandler(async (req, res) => {
     const all = req.query.scope === 'all' && can(req.user, 'notices.manage');
     const notices = await prisma.notice.findMany({
-      where: all ? {} : audienceFilter(req.user),
+      where: all
+        ? {}
+        : {
+            ...audienceFilter(req.user),
+            // Nothing from before this person joined. A new starter opening
+            // the app should not be handed a year of announcements that were
+            // never meant for them, all marked unread.
+            createdAt: { gte: req.user.joinDate },
+          },
       include: {
         createdBy: { select: { name: true, role: true } },
         department: { select: { name: true } },

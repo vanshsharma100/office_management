@@ -162,7 +162,8 @@ router.post(
     }
 
     // Autopilot ON → counts immediately, no approval step (Section 10.3).
-    const autopilot = user.department.autopilot;
+    // A per-person override wins over the department's setting.
+    const autopilot = user.autopilot ?? user.department.autopilot;
     const status = autopilot ? SUBMISSION_STATUS.APPROVED : SUBMISSION_STATUS.PENDING;
 
     const submission = await prisma.workSubmission.upsert({
